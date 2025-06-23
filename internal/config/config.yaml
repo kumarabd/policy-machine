@@ -1,0 +1,14 @@
+# Server configurations
+server:
+  base:
+    port: 8500
+postgres:
+  endpoint: 
+    username: policy
+    password: password123
+    host: localhost
+    port: 5433
+    db: policy-machine
+    ssl_mode: disable
+  dial_timeout_seconds: 10
+  max_retries: 5

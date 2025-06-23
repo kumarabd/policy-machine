@@ -1,30 +1,253 @@
+<<<<<<< HEAD
 # Policy Engine Library
+=======
+# Policy Machine + Auth Engine API
+>>>>>>> 108ea90 (added swagger and rearch)
 
 [![Go](https://img.shields.io/badge/Go-1.23-blue.svg)](https://golang.org/)
 [![Database](https://img.shields.io/badge/Database-PostgreSQL-blue.svg)](https://postgresql.org/)
 [![GORM](https://img.shields.io/badge/ORM-GORM-green.svg)](https://gorm.io/)
 [![NGAC](https://img.shields.io/badge/Standard-NGAC-green.svg)](https://nvlpubs.nist.gov/nistpubs/SpecialPublications/NIST.SP.800-162.pdf)
 
-A comprehensive Go library implementing **NGAC (Next Generation Access Control)** standard with full support for policy classes, user/object attributes, assignments, associations, prohibitions, and efficient graph-based policy evaluation algorithms.
+**A unified access control system** that provides a simple authorization API alongside comprehensive policy management capabilities. Start simple with our main authorization endpoint, then expand to advanced access control models as needed.
 
 ## Table of Contents
 
-- [Overview](#overview)
-- [Architecture](#architecture)
-- [Core Concepts](#core-concepts)
-- [Installation](#installation)
-- [Quick Start](#quick-start)
-- [Data Models](#data-models)
-- [API Reference](#api-reference)
-- [Policy Evaluation](#policy-evaluation)
-- [Usage Examples](#usage-examples)
-- [Advanced Features](#advanced-features)
-- [Performance](#performance)
-- [Contributing](#contributing)
+- [🚀 Quick Start](#-quick-start)
+- [📡 API Overview](#-api-overview)
+- [⚡ Core Authorization](#-core-authorization)
+- [🛠️ Policy Management](#️-policy-management)
+- [🎯 Advanced APIs](#-advanced-apis)
+- [🔧 Technical Documentation](#-technical-documentation)
+  - [Overview](#overview)
+  - [Architecture](#architecture)
+  - [Core Concepts](#core-concepts)
+  - [Installation](#installation)
+  - [Data Models](#data-models)
+  - [API Reference](#api-reference)
+  - [Policy Evaluation](#policy-evaluation)
+  - [Usage Examples](#usage-examples)
+  - [Advanced Features](#advanced-features)
+  - [Performance](#performance)
+  - [Contributing](#contributing)
+
+## 🚀 Quick Start
+
+### The 30-Second Authorization Setup
+
+```bash
+# Start the server
+go run cmd/main.go --config internal/config/config.yaml
+```
+
+```bash
+# Make authorization requests
+curl -X POST http://localhost:8080/api/v1/authorize \
+  -H "Content-Type: application/json" \
+  -d '{
+    "subject": "user123",
+    "action": "read", 
+    "resource": "document456"
+  }'
+```
+
+**Response:**
+```json
+{
+  "allowed": true,
+  "reason": "User has admin role with read permission",
+  "policy_id": "rbac-admin-policy",
+  "decision_time_ms": 15
+}
+```
+
+### Swagger Documentation
+
+🔍 **Interactive API Explorer:** `http://localhost:8080/swagger/index.html`
+
+## 📡 API Overview
+
+Our API is designed with a **layered approach** for different user needs:
+
+```
+🔵 CORE APIs (Start Here)
+├── POST /api/v1/authorize          # ⭐ Main authorization endpoint  
+└── /api/v1/policies/*              # Universal policy management
+
+🟡 ADVANCED APIs (When You Need More)
+├── /api/v1/rbac/*                  # Role-Based Access Control
+├── /api/v1/abac/*                  # Attribute-Based Access Control  
+└── /api/v1/rebac/*                 # Relationship-Based Access Control
+
+🔴 INTERNAL APIs (Expert Users Only)
+└── /api/v1/ngac/*                  # Next Generation Access Control
+```
+
+### Why This Structure?
+
+- **🎯 Simple Start**: One authorization endpoint handles 80% of use cases
+- **📈 Flexible Growth**: Expand to advanced models when you need them
+- **🔧 Power User Ready**: Full access to sophisticated access control models
+- **🏢 Enterprise Scale**: NGAC compliance for complex organizational needs
+
+## ⚡ Core Authorization
+
+### Single Authorization Endpoint
+
+**`POST /api/v1/authorize`** - Works with all access control models
+
+```json
+{
+  "subject": "user123",           // Who is making the request
+  "action": "read",              // What they want to do
+  "resource": "document456",     // What they want to access
+  "context": {                   // Optional context
+    "ip": "192.168.1.1",
+    "time": "2024-01-01T12:00:00Z",
+    "department": "engineering"
+  }
+}
+```
+
+**Response:**
+```json
+{
+  "allowed": true,                    // ✅ Authorization decision
+  "reason": "User has admin role",    // Human-readable explanation
+  "policy_id": "rbac-policy-123",     // Which policy granted access
+  "decision_time_ms": 15              // Performance metrics
+}
+```
+
+### Authorization Features
+
+- ⚡ **Fast**: Sub-20ms response times
+- 🔄 **Universal**: Works with RBAC, ABAC, ReBAC policies
+- 📊 **Observable**: Built-in timing and reasoning
+- 🛡️ **Secure**: Default deny with explicit permits
+- 🌍 **Context-Aware**: Supports environmental attributes
+
+## 🛠️ Policy Management
+
+### Universal Policy API
+
+**`/api/v1/policies/*`** - Manage policies across all access control models
+
+#### Create a Policy
+```bash
+POST /api/v1/policies
+{
+  "name": "engineering-read-access",
+  "type": "rbac",
+  "rules": {
+    "role": "engineer",
+    "resource_type": "document",
+    "actions": ["read", "comment"]
+  }
+}
+```
+
+#### List All Policies
+```bash
+GET /api/v1/policies?type=rbac
+```
+
+#### Validate Policy
+```bash
+POST /api/v1/policies/validate
+{
+  "policy": { /* policy definition */ }
+}
+```
+
+#### Policy Versioning
+```bash
+GET /api/v1/policies/my-policy-123/versions
+POST /api/v1/policies/my-policy-123/versions
+```
+
+## 🎯 Advanced APIs
+
+When you need model-specific features, use our advanced APIs:
+
+### RBAC (Role-Based Access Control)
+**Best for:** Traditional organizational hierarchies
+
+```bash
+# Manage roles
+POST /api/v1/rbac/roles
+GET /api/v1/rbac/roles
+
+# Manage permissions  
+POST /api/v1/rbac/permissions
+POST /api/v1/rbac/roles/{roleId}/permissions
+```
+
+### ABAC (Attribute-Based Access Control)
+**Best for:** Complex rules based on user/resource attributes
+
+```bash
+# Manage attribute-based policies
+POST /api/v1/abac/policies
+GET /api/v1/abac/policies
+
+# Define attribute schemas
+POST /api/v1/abac/attributes
+```
+
+### ReBAC (Relationship-Based Access Control)
+**Best for:** Google Zanzibar-style relationship modeling
+
+```bash
+# Manage relationship schemas
+POST /api/v1/rebac/schemas
+POST /api/v1/rebac/relation-types
+```
+
+### NGAC (Next Generation Access Control) 
+**Expert Level:** Full NIST standard implementation
+
+```bash
+# Advanced NGAC constructs
+POST /api/v1/ngac/policy-classes
+POST /api/v1/ngac/user-attributes
+GET /api/v1/ngac/graph
+```
+
+## 🎯 Summary
+
+**Start Simple**: Use `POST /api/v1/authorize` for immediate authorization needs
+
+**Scale Gradually**: Add policy management with `/api/v1/policies/*` as you grow
+
+**Expand When Needed**: Leverage advanced APIs (RBAC, ABAC, ReBAC) for specific requirements
+
+**Enterprise Ready**: Full NGAC compliance available for complex organizational structures
+
+### Integration Examples
+
+| Use Case | Recommended Approach | APIs to Use |
+|----------|---------------------|-------------|
+| **Simple Web App** | Just authorization checks | `POST /api/v1/authorize` |
+| **Growing Startup** | Basic + policy management | Core APIs + policy management |
+| **Enterprise RBAC** | Role-based with hierarchy | Core + RBAC APIs |
+| **Multi-tenant SaaS** | Complex attribute rules | Core + ABAC APIs |
+| **Google-style Permissions** | Relationship modeling | Core + ReBAC APIs |
+| **Government/Defense** | Full compliance required | All APIs including NGAC |
+
+---
+
+## 🔧 Technical Documentation
+
+> The following sections provide detailed technical information about the underlying policy engine implementation and NGAC compliance.
+
+---
 
 ## Overview
 
 The Policy Engine is a sophisticated access control library implementing the **NGAC (Next Generation Access Control)** standard as defined by NIST Special Publication 800-162. It provides a unified framework that combines relationship-based and attribute-based access control with graph-based policy evaluation algorithms.
+
+**🔄 Integration Note**: The policy engine serves as the backend for the front-facing authorization API described above. While most users will interact with the simple `/api/v1/authorize` endpoint, this documentation explains the powerful NGAC-compliant engine that powers it.
 
 ### Key Features
 
@@ -242,7 +465,7 @@ CREATE TABLE entities (
 -- (See model files for complete schema)
 ```
 
-## Quick Start
+## Getting Started with Policy Engine Library
 
 ### 1. Initialize the Policy Engine
 

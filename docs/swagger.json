@@ -1,0 +1,1753 @@
+{
+    "swagger": "2.0",
+    "info": {
+        "contact": {}
+    },
+    "paths": {
+        "/api/v1/abac/attributes": {
+            "get": {
+                "description": "Get a list of all attribute definitions used in ABAC policies",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "3-advanced-abac"
+                ],
+                "summary": "List all attribute definitions",
+                "responses": {
+                    "200": {
+                        "description": "List of attribute definitions",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/server.AttributeDefinitionDetails"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "Create a new attribute definition for ABAC policies",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "3-advanced-abac"
+                ],
+                "summary": "Create a new attribute definition",
+                "parameters": [
+                    {
+                        "description": "Attribute definition creation request",
+                        "name": "attribute",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/server.CreateAttributeDefinitionRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Attribute definition created successfully",
+                        "schema": {
+                            "$ref": "#/definitions/server.CreateAttributeDefinitionResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/abac/policies": {
+            "get": {
+                "description": "Get a list of all Attribute-Based Access Control policies",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "3-advanced-abac"
+                ],
+                "summary": "List all ABAC policies",
+                "responses": {
+                    "200": {
+                        "description": "List of ABAC policies",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/server.ABACPolicyDetails"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "Create a new Attribute-Based Access Control policy",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "3-advanced-abac"
+                ],
+                "summary": "Create a new ABAC policy",
+                "parameters": [
+                    {
+                        "description": "ABAC policy creation request",
+                        "name": "policy",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/server.CreateABACPolicyRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "ABAC policy created successfully",
+                        "schema": {
+                            "$ref": "#/definitions/server.CreateABACPolicyResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/abac/policies/{id}": {
+            "put": {
+                "description": "Update an existing Attribute-Based Access Control policy",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "3-advanced-abac"
+                ],
+                "summary": "Update an ABAC policy",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Policy ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "ABAC policy update request",
+                        "name": "policy",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/server.UpdateABACPolicyRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "ABAC policy updated successfully",
+                        "schema": {
+                            "$ref": "#/definitions/server.UpdateABACPolicyResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Policy not found",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "description": "Delete an existing Attribute-Based Access Control policy",
+                "tags": [
+                    "3-advanced-abac"
+                ],
+                "summary": "Delete an ABAC policy",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Policy ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "ABAC policy deleted successfully"
+                    },
+                    "400": {
+                        "description": "Bad request",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Policy not found",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/authorize": {
+            "post": {
+                "description": "Check if a subject is authorized to perform an action on a resource",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "0-core-authorization"
+                ],
+                "summary": "Authorize an action",
+                "parameters": [
+                    {
+                        "description": "Authorization request",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/server.AuthorizationRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Authorization decision",
+                        "schema": {
+                            "$ref": "#/definitions/server.AuthorizationResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/ngac/assignments": {
+            "post": {
+                "description": "Create a new assignment relationship in the NGAC system",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "9-internal-ngac"
+                ],
+                "summary": "Create a new assignment",
+                "parameters": [
+                    {
+                        "description": "Assignment creation request",
+                        "name": "assignment",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/server.CreateAssignmentRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Assignment created successfully",
+                        "schema": {
+                            "$ref": "#/definitions/server.CreateAssignmentResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/ngac/associations": {
+            "post": {
+                "description": "Create a new association relationship in the NGAC system",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "9-internal-ngac"
+                ],
+                "summary": "Create a new association",
+                "parameters": [
+                    {
+                        "description": "Association creation request",
+                        "name": "association",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/server.CreateAssociationRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Association created successfully",
+                        "schema": {
+                            "$ref": "#/definitions/server.CreateAssociationResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/ngac/graph": {
+            "get": {
+                "description": "Get the complete NGAC graph showing all relationships and nodes",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "9-internal-ngac"
+                ],
+                "summary": "Get the NGAC graph",
+                "responses": {
+                    "200": {
+                        "description": "NGAC graph data",
+                        "schema": {
+                            "$ref": "#/definitions/server.NGACGraphResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/ngac/object-attributes": {
+            "post": {
+                "description": "Create a new object attribute in the NGAC system",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "9-internal-ngac"
+                ],
+                "summary": "Create a new object attribute",
+                "parameters": [
+                    {
+                        "description": "Object attribute creation request",
+                        "name": "objectAttribute",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/server.CreateObjectAttributeRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Object attribute created successfully",
+                        "schema": {
+                            "$ref": "#/definitions/server.CreateObjectAttributeResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/ngac/policy-classes": {
+            "get": {
+                "description": "Get a list of all policy classes in the NGAC system",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "9-internal-ngac"
+                ],
+                "summary": "List all policy classes",
+                "responses": {
+                    "200": {
+                        "description": "List of policy classes",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/server.PolicyClassDetails"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "Create a new policy class in the NGAC (Next Generation Access Control) system",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "9-internal-ngac"
+                ],
+                "summary": "Create a new policy class",
+                "parameters": [
+                    {
+                        "description": "Policy class creation request",
+                        "name": "policyClass",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/server.CreatePolicyClassRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Policy class created successfully",
+                        "schema": {
+                            "$ref": "#/definitions/server.CreatePolicyClassResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/ngac/user-attributes": {
+            "post": {
+                "description": "Create a new user attribute in the NGAC system",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "9-internal-ngac"
+                ],
+                "summary": "Create a new user attribute",
+                "parameters": [
+                    {
+                        "description": "User attribute creation request",
+                        "name": "userAttribute",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/server.CreateUserAttributeRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "User attribute created successfully",
+                        "schema": {
+                            "$ref": "#/definitions/server.CreateUserAttributeResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/policies": {
+            "get": {
+                "description": "Get a list of all policies in the system",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "1-core-policies"
+                ],
+                "summary": "List all policies",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Filter by policy type (rbac, abac, rebac)",
+                        "name": "type",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "List of policies",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/server.PolicyDetails"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "Create a new policy that can support multiple access control models",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "1-core-policies"
+                ],
+                "summary": "Create a new policy",
+                "parameters": [
+                    {
+                        "description": "Policy creation request",
+                        "name": "policy",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/server.CreatePolicyRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Policy created successfully",
+                        "schema": {
+                            "$ref": "#/definitions/server.CreatePolicyResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/policies/validate": {
+            "post": {
+                "description": "Validate the syntax and semantics of a policy",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "1-core-policies"
+                ],
+                "summary": "Validate a policy",
+                "parameters": [
+                    {
+                        "description": "Policy validation request",
+                        "name": "policy",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/server.ValidatePolicyRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Policy validation result",
+                        "schema": {
+                            "$ref": "#/definitions/server.ValidatePolicyResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/policies/{id}": {
+            "put": {
+                "description": "Update an existing policy in the system",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "1-core-policies"
+                ],
+                "summary": "Update a policy",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Policy ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Policy update request",
+                        "name": "policy",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/server.UpdatePolicyRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Policy updated successfully",
+                        "schema": {
+                            "$ref": "#/definitions/server.UpdatePolicyResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Policy not found",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "description": "Delete an existing policy from the system",
+                "tags": [
+                    "1-core-policies"
+                ],
+                "summary": "Delete a policy",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Policy ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "Policy deleted successfully"
+                    },
+                    "400": {
+                        "description": "Bad request",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Policy not found",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/policies/{id}/versions": {
+            "get": {
+                "description": "Get a list of all versions for a specific policy",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "policy-versions"
+                ],
+                "summary": "List policy versions",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Policy ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "List of policy versions",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/server.PolicyVersionDetails"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Policy not found",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "Create a new version of an existing policy",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "policy-versions"
+                ],
+                "summary": "Create a new policy version",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Policy ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Policy version creation request",
+                        "name": "version",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/server.CreatePolicyVersionRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Policy version created successfully",
+                        "schema": {
+                            "$ref": "#/definitions/server.CreatePolicyVersionResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Policy not found",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/rbac/permissions": {
+            "get": {
+                "description": "Get a list of all permissions in the RBAC system",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "2-advanced-rbac"
+                ],
+                "summary": "List all permissions",
+                "responses": {
+                    "200": {
+                        "description": "List of permissions",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/server.PermissionDetails"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "Create a new permission in the RBAC system",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "2-advanced-rbac"
+                ],
+                "summary": "Create a new permission",
+                "parameters": [
+                    {
+                        "description": "Permission creation request",
+                        "name": "permission",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/server.CreatePermissionRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Permission created successfully",
+                        "schema": {
+                            "$ref": "#/definitions/server.CreatePermissionResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/rbac/permissions/assign": {
+            "post": {
+                "description": "Assign an existing permission to a role in the RBAC system",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "2-advanced-rbac"
+                ],
+                "summary": "Assign permission to role",
+                "parameters": [
+                    {
+                        "description": "Permission assignment request",
+                        "name": "assignment",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/server.AssignPermissionRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Permission assigned successfully",
+                        "schema": {
+                            "$ref": "#/definitions/server.AssignPermissionResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Role or permission not found",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/rbac/permissions/remove": {
+            "post": {
+                "description": "Remove an assigned permission from a role in the RBAC system",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "2-advanced-rbac"
+                ],
+                "summary": "Remove permission from role",
+                "parameters": [
+                    {
+                        "description": "Permission removal request",
+                        "name": "removal",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/server.RemovePermissionRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Permission removed successfully",
+                        "schema": {
+                            "$ref": "#/definitions/server.RemovePermissionResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Role or permission not found",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/rbac/roles": {
+            "get": {
+                "description": "Get a list of all roles in the RBAC system",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "2-advanced-rbac"
+                ],
+                "summary": "List all roles",
+                "responses": {
+                    "200": {
+                        "description": "List of roles",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/server.RoleDetails"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "Create a new role in the RBAC system as a subject attribute",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "2-advanced-rbac"
+                ],
+                "summary": "Create a new role",
+                "parameters": [
+                    {
+                        "description": "Role creation request",
+                        "name": "role",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/server.CreateRoleRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Role created successfully",
+                        "schema": {
+                            "$ref": "#/definitions/server.CreateRoleResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/rbac/roles/{id}": {
+            "put": {
+                "description": "Update an existing role in the RBAC system",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "2-advanced-rbac"
+                ],
+                "summary": "Update a role",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Role ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Role update request",
+                        "name": "role",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/server.UpdateRoleRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Role updated successfully",
+                        "schema": {
+                            "$ref": "#/definitions/server.UpdateRoleResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Role not found",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "description": "Delete an existing role from the RBAC system",
+                "tags": [
+                    "2-advanced-rbac"
+                ],
+                "summary": "Delete a role",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Role ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "Role deleted successfully"
+                    },
+                    "400": {
+                        "description": "Bad request",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Role not found",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/rebac/relation-types": {
+            "get": {
+                "description": "Get a list of all relation types used in ReBAC schemas",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "4-advanced-rebac"
+                ],
+                "summary": "List all relation types",
+                "responses": {
+                    "200": {
+                        "description": "List of relation types",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/server.RelationTypeDetails"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "Create a new relation type for ReBAC schemas",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "4-advanced-rebac"
+                ],
+                "summary": "Create a new relation type",
+                "parameters": [
+                    {
+                        "description": "Relation type creation request",
+                        "name": "relationType",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/server.CreateRelationTypeRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Relation type created successfully",
+                        "schema": {
+                            "$ref": "#/definitions/server.CreateRelationTypeResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/rebac/schemas": {
+            "get": {
+                "description": "Get a list of all Relationship-Based Access Control schemas",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "4-advanced-rebac"
+                ],
+                "summary": "List all ReBAC schemas",
+                "responses": {
+                    "200": {
+                        "description": "List of ReBAC schemas",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/server.ReBACSchemaDetails"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "Create a new Relationship-Based Access Control schema",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "4-advanced-rebac"
+                ],
+                "summary": "Create a new ReBAC schema",
+                "parameters": [
+                    {
+                        "description": "ReBAC schema creation request",
+                        "name": "schema",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/server.CreateReBACSchemaRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "ReBAC schema created successfully",
+                        "schema": {
+                            "$ref": "#/definitions/server.CreateReBACSchemaResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/rebac/schemas/{id}": {
+            "put": {
+                "description": "Update an existing Relationship-Based Access Control schema",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "4-advanced-rebac"
+                ],
+                "summary": "Update a ReBAC schema",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Schema ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "ReBAC schema update request",
+                        "name": "schema",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/server.UpdateReBACSchemaRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "ReBAC schema updated successfully",
+                        "schema": {
+                            "$ref": "#/definitions/server.UpdateReBACSchemaResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Schema not found",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/healthz": {
+            "get": {
+                "description": "Get the health status of the service",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "health"
+                ],
+                "summary": "Health check",
+                "responses": {
+                    "200": {
+                        "description": "Service is healthy",
+                        "schema": {
+                            "type": "object",
+                            "properties": {
+                                "status": {
+                                    "type": "string"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "definitions": {
+        "server.ABACPolicyDetails": {
+            "type": "object"
+        },
+        "server.AssignPermissionRequest": {
+            "type": "object"
+        },
+        "server.AssignPermissionResponse": {
+            "type": "object"
+        },
+        "server.AttributeDefinitionDetails": {
+            "type": "object"
+        },
+        "server.AuthorizationRequest": {
+            "type": "object",
+            "required": [
+                "action",
+                "resource",
+                "subject"
+            ],
+            "properties": {
+                "action": {
+                    "description": "Action being performed\nrequired: true\nexample: read",
+                    "type": "string"
+                },
+                "context": {
+                    "description": "Additional context for the authorization decision\nexample: {\"ip\": \"192.168.1.1\", \"time\": \"2024-01-01T12:00:00Z\", \"department\": \"engineering\"}",
+                    "type": "object",
+                    "additionalProperties": true
+                },
+                "resource": {
+                    "description": "Resource being accessed\nrequired: true\nexample: document456",
+                    "type": "string"
+                },
+                "subject": {
+                    "description": "Subject performing the action (user, service, etc.)\nrequired: true\nexample: user123",
+                    "type": "string"
+                }
+            }
+        },
+        "server.AuthorizationResponse": {
+            "type": "object",
+            "properties": {
+                "allowed": {
+                    "description": "Whether the action is allowed\nexample: true",
+                    "type": "boolean"
+                },
+                "decision_time_ms": {
+                    "description": "Decision time in milliseconds\nexample: 15",
+                    "type": "integer"
+                },
+                "policy_id": {
+                    "description": "Policy that made the decision (optional)\nexample: rbac-admin-policy",
+                    "type": "string"
+                },
+                "reason": {
+                    "description": "Reason for the decision (optional)\nexample: User has admin role with read permission",
+                    "type": "string"
+                }
+            }
+        },
+        "server.CreateABACPolicyRequest": {
+            "type": "object"
+        },
+        "server.CreateABACPolicyResponse": {
+            "type": "object"
+        },
+        "server.CreateAssignmentRequest": {
+            "type": "object"
+        },
+        "server.CreateAssignmentResponse": {
+            "type": "object"
+        },
+        "server.CreateAssociationRequest": {
+            "type": "object"
+        },
+        "server.CreateAssociationResponse": {
+            "type": "object"
+        },
+        "server.CreateAttributeDefinitionRequest": {
+            "type": "object"
+        },
+        "server.CreateAttributeDefinitionResponse": {
+            "type": "object"
+        },
+        "server.CreateObjectAttributeRequest": {
+            "type": "object"
+        },
+        "server.CreateObjectAttributeResponse": {
+            "type": "object"
+        },
+        "server.CreatePermissionRequest": {
+            "type": "object"
+        },
+        "server.CreatePermissionResponse": {
+            "type": "object"
+        },
+        "server.CreatePolicyClassRequest": {
+            "type": "object"
+        },
+        "server.CreatePolicyClassResponse": {
+            "type": "object"
+        },
+        "server.CreatePolicyRequest": {
+            "type": "object"
+        },
+        "server.CreatePolicyResponse": {
+            "type": "object"
+        },
+        "server.CreatePolicyVersionRequest": {
+            "type": "object"
+        },
+        "server.CreatePolicyVersionResponse": {
+            "type": "object"
+        },
+        "server.CreateReBACSchemaRequest": {
+            "type": "object"
+        },
+        "server.CreateReBACSchemaResponse": {
+            "type": "object"
+        },
+        "server.CreateRelationTypeRequest": {
+            "type": "object"
+        },
+        "server.CreateRelationTypeResponse": {
+            "type": "object"
+        },
+        "server.CreateRoleRequest": {
+            "type": "object",
+            "required": [
+                "name"
+            ],
+            "properties": {
+                "description": {
+                    "description": "Description of the role\nexample: Administrator role with full access",
+                    "type": "string"
+                },
+                "name": {
+                    "description": "The name of the role\nrequired: true\nexample: admin",
+                    "type": "string"
+                },
+                "properties": {
+                    "description": "Additional properties for the role\nexample: {\"department\": \"IT\", \"level\": \"high\"}",
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "server.CreateRoleResponse": {
+            "type": "object",
+            "properties": {
+                "message": {
+                    "description": "Success message\nexample: Role created successfully",
+                    "type": "string"
+                },
+                "role": {
+                    "description": "Created role details",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/server.RoleDetails"
+                        }
+                    ]
+                }
+            }
+        },
+        "server.CreateUserAttributeRequest": {
+            "type": "object"
+        },
+        "server.CreateUserAttributeResponse": {
+            "type": "object"
+        },
+        "server.ErrorResponse": {
+            "type": "object",
+            "properties": {
+                "error": {
+                    "description": "Error code\nexample: validation_error",
+                    "type": "string"
+                },
+                "message": {
+                    "description": "Error message\nexample: Role name is required",
+                    "type": "string"
+                }
+            }
+        },
+        "server.NGACGraphResponse": {
+            "type": "object"
+        },
+        "server.PermissionDetails": {
+            "type": "object"
+        },
+        "server.PolicyClassDetails": {
+            "type": "object"
+        },
+        "server.PolicyDetails": {
+            "type": "object"
+        },
+        "server.PolicyVersionDetails": {
+            "type": "object"
+        },
+        "server.ReBACSchemaDetails": {
+            "type": "object"
+        },
+        "server.RelationTypeDetails": {
+            "type": "object"
+        },
+        "server.RemovePermissionRequest": {
+            "type": "object"
+        },
+        "server.RemovePermissionResponse": {
+            "type": "object"
+        },
+        "server.RoleDetails": {
+            "type": "object",
+            "properties": {
+                "description": {
+                    "description": "Description of the role\nexample: Administrator role with full access",
+                    "type": "string"
+                },
+                "entity_id": {
+                    "description": "Unique entity identifier\nexample: role_admin_123abc",
+                    "type": "string"
+                },
+                "name": {
+                    "description": "The name of the role\nexample: admin",
+                    "type": "string"
+                },
+                "properties": {
+                    "description": "Additional properties for the role\nexample: {\"department\": \"IT\", \"level\": \"high\", \"type\": \"role\", \"parent\": \"role\"}",
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "server.UpdateABACPolicyRequest": {
+            "type": "object"
+        },
+        "server.UpdateABACPolicyResponse": {
+            "type": "object"
+        },
+        "server.UpdatePolicyRequest": {
+            "type": "object"
+        },
+        "server.UpdatePolicyResponse": {
+            "type": "object"
+        },
+        "server.UpdateReBACSchemaRequest": {
+            "type": "object"
+        },
+        "server.UpdateReBACSchemaResponse": {
+            "type": "object"
+        },
+        "server.UpdateRoleRequest": {
+            "type": "object"
+        },
+        "server.UpdateRoleResponse": {
+            "type": "object"
+        },
+        "server.ValidatePolicyRequest": {
+            "type": "object"
+        },
+        "server.ValidatePolicyResponse": {
+            "type": "object"
+        }
+    }
+}

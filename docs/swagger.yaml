@@ -1,0 +1,1198 @@
+definitions:
+  server.ABACPolicyDetails:
+    type: object
+  server.AssignPermissionRequest:
+    type: object
+  server.AssignPermissionResponse:
+    type: object
+  server.AttributeDefinitionDetails:
+    type: object
+  server.AuthorizationRequest:
+    properties:
+      action:
+        description: |-
+          Action being performed
+          required: true
+          example: read
+        type: string
+      context:
+        additionalProperties: true
+        description: |-
+          Additional context for the authorization decision
+          example: {"ip": "192.168.1.1", "time": "2024-01-01T12:00:00Z", "department": "engineering"}
+        type: object
+      resource:
+        description: |-
+          Resource being accessed
+          required: true
+          example: document456
+        type: string
+      subject:
+        description: |-
+          Subject performing the action (user, service, etc.)
+          required: true
+          example: user123
+        type: string
+    required:
+    - action
+    - resource
+    - subject
+    type: object
+  server.AuthorizationResponse:
+    properties:
+      allowed:
+        description: |-
+          Whether the action is allowed
+          example: true
+        type: boolean
+      decision_time_ms:
+        description: |-
+          Decision time in milliseconds
+          example: 15
+        type: integer
+      policy_id:
+        description: |-
+          Policy that made the decision (optional)
+          example: rbac-admin-policy
+        type: string
+      reason:
+        description: |-
+          Reason for the decision (optional)
+          example: User has admin role with read permission
+        type: string
+    type: object
+  server.CreateABACPolicyRequest:
+    type: object
+  server.CreateABACPolicyResponse:
+    type: object
+  server.CreateAssignmentRequest:
+    type: object
+  server.CreateAssignmentResponse:
+    type: object
+  server.CreateAssociationRequest:
+    type: object
+  server.CreateAssociationResponse:
+    type: object
+  server.CreateAttributeDefinitionRequest:
+    type: object
+  server.CreateAttributeDefinitionResponse:
+    type: object
+  server.CreateObjectAttributeRequest:
+    type: object
+  server.CreateObjectAttributeResponse:
+    type: object
+  server.CreatePermissionRequest:
+    type: object
+  server.CreatePermissionResponse:
+    type: object
+  server.CreatePolicyClassRequest:
+    type: object
+  server.CreatePolicyClassResponse:
+    type: object
+  server.CreatePolicyRequest:
+    type: object
+  server.CreatePolicyResponse:
+    type: object
+  server.CreatePolicyVersionRequest:
+    type: object
+  server.CreatePolicyVersionResponse:
+    type: object
+  server.CreateReBACSchemaRequest:
+    type: object
+  server.CreateReBACSchemaResponse:
+    type: object
+  server.CreateRelationTypeRequest:
+    type: object
+  server.CreateRelationTypeResponse:
+    type: object
+  server.CreateRoleRequest:
+    properties:
+      description:
+        description: |-
+          Description of the role
+          example: Administrator role with full access
+        type: string
+      name:
+        description: |-
+          The name of the role
+          required: true
+          example: admin
+        type: string
+      properties:
+        additionalProperties:
+          type: string
+        description: |-
+          Additional properties for the role
+          example: {"department": "IT", "level": "high"}
+        type: object
+    required:
+    - name
+    type: object
+  server.CreateRoleResponse:
+    properties:
+      message:
+        description: |-
+          Success message
+          example: Role created successfully
+        type: string
+      role:
+        allOf:
+        - $ref: '#/definitions/server.RoleDetails'
+        description: Created role details
+    type: object
+  server.CreateUserAttributeRequest:
+    type: object
+  server.CreateUserAttributeResponse:
+    type: object
+  server.ErrorResponse:
+    properties:
+      error:
+        description: |-
+          Error code
+          example: validation_error
+        type: string
+      message:
+        description: |-
+          Error message
+          example: Role name is required
+        type: string
+    type: object
+  server.NGACGraphResponse:
+    type: object
+  server.PermissionDetails:
+    type: object
+  server.PolicyClassDetails:
+    type: object
+  server.PolicyDetails:
+    type: object
+  server.PolicyVersionDetails:
+    type: object
+  server.ReBACSchemaDetails:
+    type: object
+  server.RelationTypeDetails:
+    type: object
+  server.RemovePermissionRequest:
+    type: object
+  server.RemovePermissionResponse:
+    type: object
+  server.RoleDetails:
+    properties:
+      description:
+        description: |-
+          Description of the role
+          example: Administrator role with full access
+        type: string
+      entity_id:
+        description: |-
+          Unique entity identifier
+          example: role_admin_123abc
+        type: string
+      name:
+        description: |-
+          The name of the role
+          example: admin
+        type: string
+      properties:
+        additionalProperties:
+          type: string
+        description: |-
+          Additional properties for the role
+          example: {"department": "IT", "level": "high", "type": "role", "parent": "role"}
+        type: object
+    type: object
+  server.UpdateABACPolicyRequest:
+    type: object
+  server.UpdateABACPolicyResponse:
+    type: object
+  server.UpdatePolicyRequest:
+    type: object
+  server.UpdatePolicyResponse:
+    type: object
+  server.UpdateReBACSchemaRequest:
+    type: object
+  server.UpdateReBACSchemaResponse:
+    type: object
+  server.UpdateRoleRequest:
+    type: object
+  server.UpdateRoleResponse:
+    type: object
+  server.ValidatePolicyRequest:
+    type: object
+  server.ValidatePolicyResponse:
+    type: object
+info:
+  contact: {}
+paths:
+  /api/v1/abac/attributes:
+    get:
+      description: Get a list of all attribute definitions used in ABAC policies
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: List of attribute definitions
+          schema:
+            items:
+              $ref: '#/definitions/server.AttributeDefinitionDetails'
+            type: array
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+      summary: List all attribute definitions
+      tags:
+      - 3-advanced-abac
+    post:
+      consumes:
+      - application/json
+      description: Create a new attribute definition for ABAC policies
+      parameters:
+      - description: Attribute definition creation request
+        in: body
+        name: attribute
+        required: true
+        schema:
+          $ref: '#/definitions/server.CreateAttributeDefinitionRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Attribute definition created successfully
+          schema:
+            $ref: '#/definitions/server.CreateAttributeDefinitionResponse'
+        "400":
+          description: Bad request
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+      summary: Create a new attribute definition
+      tags:
+      - 3-advanced-abac
+  /api/v1/abac/policies:
+    get:
+      description: Get a list of all Attribute-Based Access Control policies
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: List of ABAC policies
+          schema:
+            items:
+              $ref: '#/definitions/server.ABACPolicyDetails'
+            type: array
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+      summary: List all ABAC policies
+      tags:
+      - 3-advanced-abac
+    post:
+      consumes:
+      - application/json
+      description: Create a new Attribute-Based Access Control policy
+      parameters:
+      - description: ABAC policy creation request
+        in: body
+        name: policy
+        required: true
+        schema:
+          $ref: '#/definitions/server.CreateABACPolicyRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: ABAC policy created successfully
+          schema:
+            $ref: '#/definitions/server.CreateABACPolicyResponse'
+        "400":
+          description: Bad request
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+      summary: Create a new ABAC policy
+      tags:
+      - 3-advanced-abac
+  /api/v1/abac/policies/{id}:
+    delete:
+      description: Delete an existing Attribute-Based Access Control policy
+      parameters:
+      - description: Policy ID
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "204":
+          description: ABAC policy deleted successfully
+        "400":
+          description: Bad request
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "404":
+          description: Policy not found
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+      summary: Delete an ABAC policy
+      tags:
+      - 3-advanced-abac
+    put:
+      consumes:
+      - application/json
+      description: Update an existing Attribute-Based Access Control policy
+      parameters:
+      - description: Policy ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: ABAC policy update request
+        in: body
+        name: policy
+        required: true
+        schema:
+          $ref: '#/definitions/server.UpdateABACPolicyRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: ABAC policy updated successfully
+          schema:
+            $ref: '#/definitions/server.UpdateABACPolicyResponse'
+        "400":
+          description: Bad request
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "404":
+          description: Policy not found
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+      summary: Update an ABAC policy
+      tags:
+      - 3-advanced-abac
+  /api/v1/authorize:
+    post:
+      consumes:
+      - application/json
+      description: Check if a subject is authorized to perform an action on a resource
+      parameters:
+      - description: Authorization request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/server.AuthorizationRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Authorization decision
+          schema:
+            $ref: '#/definitions/server.AuthorizationResponse'
+        "400":
+          description: Bad request
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+      summary: Authorize an action
+      tags:
+      - 0-core-authorization
+  /api/v1/ngac/assignments:
+    post:
+      consumes:
+      - application/json
+      description: Create a new assignment relationship in the NGAC system
+      parameters:
+      - description: Assignment creation request
+        in: body
+        name: assignment
+        required: true
+        schema:
+          $ref: '#/definitions/server.CreateAssignmentRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Assignment created successfully
+          schema:
+            $ref: '#/definitions/server.CreateAssignmentResponse'
+        "400":
+          description: Bad request
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+      summary: Create a new assignment
+      tags:
+      - 9-internal-ngac
+  /api/v1/ngac/associations:
+    post:
+      consumes:
+      - application/json
+      description: Create a new association relationship in the NGAC system
+      parameters:
+      - description: Association creation request
+        in: body
+        name: association
+        required: true
+        schema:
+          $ref: '#/definitions/server.CreateAssociationRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Association created successfully
+          schema:
+            $ref: '#/definitions/server.CreateAssociationResponse'
+        "400":
+          description: Bad request
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+      summary: Create a new association
+      tags:
+      - 9-internal-ngac
+  /api/v1/ngac/graph:
+    get:
+      description: Get the complete NGAC graph showing all relationships and nodes
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: NGAC graph data
+          schema:
+            $ref: '#/definitions/server.NGACGraphResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+      summary: Get the NGAC graph
+      tags:
+      - 9-internal-ngac
+  /api/v1/ngac/object-attributes:
+    post:
+      consumes:
+      - application/json
+      description: Create a new object attribute in the NGAC system
+      parameters:
+      - description: Object attribute creation request
+        in: body
+        name: objectAttribute
+        required: true
+        schema:
+          $ref: '#/definitions/server.CreateObjectAttributeRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Object attribute created successfully
+          schema:
+            $ref: '#/definitions/server.CreateObjectAttributeResponse'
+        "400":
+          description: Bad request
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+      summary: Create a new object attribute
+      tags:
+      - 9-internal-ngac
+  /api/v1/ngac/policy-classes:
+    get:
+      description: Get a list of all policy classes in the NGAC system
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: List of policy classes
+          schema:
+            items:
+              $ref: '#/definitions/server.PolicyClassDetails'
+            type: array
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+      summary: List all policy classes
+      tags:
+      - 9-internal-ngac
+    post:
+      consumes:
+      - application/json
+      description: Create a new policy class in the NGAC (Next Generation Access Control)
+        system
+      parameters:
+      - description: Policy class creation request
+        in: body
+        name: policyClass
+        required: true
+        schema:
+          $ref: '#/definitions/server.CreatePolicyClassRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Policy class created successfully
+          schema:
+            $ref: '#/definitions/server.CreatePolicyClassResponse'
+        "400":
+          description: Bad request
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+      summary: Create a new policy class
+      tags:
+      - 9-internal-ngac
+  /api/v1/ngac/user-attributes:
+    post:
+      consumes:
+      - application/json
+      description: Create a new user attribute in the NGAC system
+      parameters:
+      - description: User attribute creation request
+        in: body
+        name: userAttribute
+        required: true
+        schema:
+          $ref: '#/definitions/server.CreateUserAttributeRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: User attribute created successfully
+          schema:
+            $ref: '#/definitions/server.CreateUserAttributeResponse'
+        "400":
+          description: Bad request
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+      summary: Create a new user attribute
+      tags:
+      - 9-internal-ngac
+  /api/v1/policies:
+    get:
+      description: Get a list of all policies in the system
+      parameters:
+      - description: Filter by policy type (rbac, abac, rebac)
+        in: query
+        name: type
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: List of policies
+          schema:
+            items:
+              $ref: '#/definitions/server.PolicyDetails'
+            type: array
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+      summary: List all policies
+      tags:
+      - 1-core-policies
+    post:
+      consumes:
+      - application/json
+      description: Create a new policy that can support multiple access control models
+      parameters:
+      - description: Policy creation request
+        in: body
+        name: policy
+        required: true
+        schema:
+          $ref: '#/definitions/server.CreatePolicyRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Policy created successfully
+          schema:
+            $ref: '#/definitions/server.CreatePolicyResponse'
+        "400":
+          description: Bad request
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+      summary: Create a new policy
+      tags:
+      - 1-core-policies
+  /api/v1/policies/{id}:
+    delete:
+      description: Delete an existing policy from the system
+      parameters:
+      - description: Policy ID
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "204":
+          description: Policy deleted successfully
+        "400":
+          description: Bad request
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "404":
+          description: Policy not found
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+      summary: Delete a policy
+      tags:
+      - 1-core-policies
+    put:
+      consumes:
+      - application/json
+      description: Update an existing policy in the system
+      parameters:
+      - description: Policy ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Policy update request
+        in: body
+        name: policy
+        required: true
+        schema:
+          $ref: '#/definitions/server.UpdatePolicyRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Policy updated successfully
+          schema:
+            $ref: '#/definitions/server.UpdatePolicyResponse'
+        "400":
+          description: Bad request
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "404":
+          description: Policy not found
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+      summary: Update a policy
+      tags:
+      - 1-core-policies
+  /api/v1/policies/{id}/versions:
+    get:
+      description: Get a list of all versions for a specific policy
+      parameters:
+      - description: Policy ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: List of policy versions
+          schema:
+            items:
+              $ref: '#/definitions/server.PolicyVersionDetails'
+            type: array
+        "404":
+          description: Policy not found
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+      summary: List policy versions
+      tags:
+      - policy-versions
+    post:
+      consumes:
+      - application/json
+      description: Create a new version of an existing policy
+      parameters:
+      - description: Policy ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Policy version creation request
+        in: body
+        name: version
+        required: true
+        schema:
+          $ref: '#/definitions/server.CreatePolicyVersionRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Policy version created successfully
+          schema:
+            $ref: '#/definitions/server.CreatePolicyVersionResponse'
+        "400":
+          description: Bad request
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "404":
+          description: Policy not found
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+      summary: Create a new policy version
+      tags:
+      - policy-versions
+  /api/v1/policies/validate:
+    post:
+      consumes:
+      - application/json
+      description: Validate the syntax and semantics of a policy
+      parameters:
+      - description: Policy validation request
+        in: body
+        name: policy
+        required: true
+        schema:
+          $ref: '#/definitions/server.ValidatePolicyRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Policy validation result
+          schema:
+            $ref: '#/definitions/server.ValidatePolicyResponse'
+        "400":
+          description: Bad request
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+      summary: Validate a policy
+      tags:
+      - 1-core-policies
+  /api/v1/rbac/permissions:
+    get:
+      description: Get a list of all permissions in the RBAC system
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: List of permissions
+          schema:
+            items:
+              $ref: '#/definitions/server.PermissionDetails'
+            type: array
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+      summary: List all permissions
+      tags:
+      - 2-advanced-rbac
+    post:
+      consumes:
+      - application/json
+      description: Create a new permission in the RBAC system
+      parameters:
+      - description: Permission creation request
+        in: body
+        name: permission
+        required: true
+        schema:
+          $ref: '#/definitions/server.CreatePermissionRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Permission created successfully
+          schema:
+            $ref: '#/definitions/server.CreatePermissionResponse'
+        "400":
+          description: Bad request
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+      summary: Create a new permission
+      tags:
+      - 2-advanced-rbac
+  /api/v1/rbac/permissions/assign:
+    post:
+      consumes:
+      - application/json
+      description: Assign an existing permission to a role in the RBAC system
+      parameters:
+      - description: Permission assignment request
+        in: body
+        name: assignment
+        required: true
+        schema:
+          $ref: '#/definitions/server.AssignPermissionRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Permission assigned successfully
+          schema:
+            $ref: '#/definitions/server.AssignPermissionResponse'
+        "400":
+          description: Bad request
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "404":
+          description: Role or permission not found
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+      summary: Assign permission to role
+      tags:
+      - 2-advanced-rbac
+  /api/v1/rbac/permissions/remove:
+    post:
+      consumes:
+      - application/json
+      description: Remove an assigned permission from a role in the RBAC system
+      parameters:
+      - description: Permission removal request
+        in: body
+        name: removal
+        required: true
+        schema:
+          $ref: '#/definitions/server.RemovePermissionRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Permission removed successfully
+          schema:
+            $ref: '#/definitions/server.RemovePermissionResponse'
+        "400":
+          description: Bad request
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "404":
+          description: Role or permission not found
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+      summary: Remove permission from role
+      tags:
+      - 2-advanced-rbac
+  /api/v1/rbac/roles:
+    get:
+      description: Get a list of all roles in the RBAC system
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: List of roles
+          schema:
+            items:
+              $ref: '#/definitions/server.RoleDetails'
+            type: array
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+      summary: List all roles
+      tags:
+      - 2-advanced-rbac
+    post:
+      consumes:
+      - application/json
+      description: Create a new role in the RBAC system as a subject attribute
+      parameters:
+      - description: Role creation request
+        in: body
+        name: role
+        required: true
+        schema:
+          $ref: '#/definitions/server.CreateRoleRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Role created successfully
+          schema:
+            $ref: '#/definitions/server.CreateRoleResponse'
+        "400":
+          description: Bad request
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+      summary: Create a new role
+      tags:
+      - 2-advanced-rbac
+  /api/v1/rbac/roles/{id}:
+    delete:
+      description: Delete an existing role from the RBAC system
+      parameters:
+      - description: Role ID
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "204":
+          description: Role deleted successfully
+        "400":
+          description: Bad request
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "404":
+          description: Role not found
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+      summary: Delete a role
+      tags:
+      - 2-advanced-rbac
+    put:
+      consumes:
+      - application/json
+      description: Update an existing role in the RBAC system
+      parameters:
+      - description: Role ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Role update request
+        in: body
+        name: role
+        required: true
+        schema:
+          $ref: '#/definitions/server.UpdateRoleRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Role updated successfully
+          schema:
+            $ref: '#/definitions/server.UpdateRoleResponse'
+        "400":
+          description: Bad request
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "404":
+          description: Role not found
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+      summary: Update a role
+      tags:
+      - 2-advanced-rbac
+  /api/v1/rebac/relation-types:
+    get:
+      description: Get a list of all relation types used in ReBAC schemas
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: List of relation types
+          schema:
+            items:
+              $ref: '#/definitions/server.RelationTypeDetails'
+            type: array
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+      summary: List all relation types
+      tags:
+      - 4-advanced-rebac
+    post:
+      consumes:
+      - application/json
+      description: Create a new relation type for ReBAC schemas
+      parameters:
+      - description: Relation type creation request
+        in: body
+        name: relationType
+        required: true
+        schema:
+          $ref: '#/definitions/server.CreateRelationTypeRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Relation type created successfully
+          schema:
+            $ref: '#/definitions/server.CreateRelationTypeResponse'
+        "400":
+          description: Bad request
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+      summary: Create a new relation type
+      tags:
+      - 4-advanced-rebac
+  /api/v1/rebac/schemas:
+    get:
+      description: Get a list of all Relationship-Based Access Control schemas
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: List of ReBAC schemas
+          schema:
+            items:
+              $ref: '#/definitions/server.ReBACSchemaDetails'
+            type: array
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+      summary: List all ReBAC schemas
+      tags:
+      - 4-advanced-rebac
+    post:
+      consumes:
+      - application/json
+      description: Create a new Relationship-Based Access Control schema
+      parameters:
+      - description: ReBAC schema creation request
+        in: body
+        name: schema
+        required: true
+        schema:
+          $ref: '#/definitions/server.CreateReBACSchemaRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: ReBAC schema created successfully
+          schema:
+            $ref: '#/definitions/server.CreateReBACSchemaResponse'
+        "400":
+          description: Bad request
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+      summary: Create a new ReBAC schema
+      tags:
+      - 4-advanced-rebac
+  /api/v1/rebac/schemas/{id}:
+    put:
+      consumes:
+      - application/json
+      description: Update an existing Relationship-Based Access Control schema
+      parameters:
+      - description: Schema ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: ReBAC schema update request
+        in: body
+        name: schema
+        required: true
+        schema:
+          $ref: '#/definitions/server.UpdateReBACSchemaRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: ReBAC schema updated successfully
+          schema:
+            $ref: '#/definitions/server.UpdateReBACSchemaResponse'
+        "400":
+          description: Bad request
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "404":
+          description: Schema not found
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+      summary: Update a ReBAC schema
+      tags:
+      - 4-advanced-rebac
+  /healthz:
+    get:
+      description: Get the health status of the service
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Service is healthy
+          schema:
+            properties:
+              status:
+                type: string
+            type: object
+      summary: Health check
+      tags:
+      - health
+swagger: "2.0"
