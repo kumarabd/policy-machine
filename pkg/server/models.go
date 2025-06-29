@@ -7,11 +7,11 @@ type CreateRoleRequest struct {
 	// required: true
 	// example: admin
 	Name string `json:"name" binding:"required"`
-	
+
 	// Description of the role
 	// example: Administrator role with full access
 	Description string `json:"description,omitempty"`
-	
+
 	// Additional properties for the role
 	// example: {"department": "IT", "level": "high"}
 	Properties map[string]string `json:"properties,omitempty"`
@@ -23,7 +23,7 @@ type CreateRoleResponse struct {
 	// Success message
 	// example: Role created successfully
 	Message string `json:"message"`
-	
+
 	// Created role details
 	Role RoleDetails `json:"role"`
 }
@@ -34,15 +34,15 @@ type RoleDetails struct {
 	// The name of the role
 	// example: admin
 	Name string `json:"name"`
-	
+
 	// Description of the role
 	// example: Administrator role with full access
 	Description string `json:"description,omitempty"`
-	
+
 	// Additional properties for the role
 	// example: {"department": "IT", "level": "high", "type": "role", "parent": "role"}
 	Properties map[string]string `json:"properties"`
-	
+
 	// Unique entity identifier
 	// example: role_admin_123abc
 	EntityID string `json:"entity_id"`
@@ -54,53 +54,10 @@ type ErrorResponse struct {
 	// Error code
 	// example: validation_error
 	Error string `json:"error"`
-	
+
 	// Error message
 	// example: Role name is required
 	Message string `json:"message"`
-}
-
-// AuthorizationRequest represents a request to check if an action is authorized
-// swagger:model AuthorizationRequest
-type AuthorizationRequest struct {
-	// Subject performing the action (user, service, etc.)
-	// required: true
-	// example: user123
-	Subject string `json:"subject" binding:"required"`
-	
-	// Action being performed
-	// required: true
-	// example: read
-	Action string `json:"action" binding:"required"`
-	
-	// Resource being accessed
-	// required: true
-	// example: document456
-	Resource string `json:"resource" binding:"required"`
-	
-	// Additional context for the authorization decision
-	// example: {"ip": "192.168.1.1", "time": "2024-01-01T12:00:00Z", "department": "engineering"}
-	Context map[string]interface{} `json:"context,omitempty"`
-}
-
-// AuthorizationResponse represents the response to an authorization request
-// swagger:model AuthorizationResponse
-type AuthorizationResponse struct {
-	// Whether the action is allowed
-	// example: true
-	Allowed bool `json:"allowed"`
-	
-	// Reason for the decision (optional)
-	// example: User has admin role with read permission
-	Reason string `json:"reason,omitempty"`
-	
-	// Policy that made the decision (optional)
-	// example: rbac-admin-policy
-	PolicyID string `json:"policy_id,omitempty"`
-	
-	// Decision time in milliseconds
-	// example: 15
-	DecisionTimeMs int64 `json:"decision_time_ms,omitempty"`
 }
 
 // Placeholder types for swagger generation (these would be properly implemented in a real system)
@@ -108,7 +65,7 @@ type AuthorizationResponse struct {
 // swagger:model CreateABACPolicyRequest
 type CreateABACPolicyRequest struct{}
 
-// swagger:model CreateABACPolicyResponse  
+// swagger:model CreateABACPolicyResponse
 type CreateABACPolicyResponse struct{}
 
 // swagger:model ABACPolicyDetails

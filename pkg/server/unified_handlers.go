@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"time"
+
+	"github.com/kumarabd/policy-machine/pkg/service"
 )
 
 // Unified Policy Management Handlers
@@ -21,12 +23,13 @@ import (
 // @Router /api/v1/authorize [post]
 func (h *BaseServer) AuthorizeHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	
+
 	start := time.Now()
-	
+
 	// Parse request body
-	var authRequest AuthorizationRequest
+	var authRequest service.AuthorizationRequest
 	if err := json.NewDecoder(r.Body).Decode(&authRequest); err != nil {
+		h.log.Error().Err(err).Msg("Failed to decode authorization request")
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(ErrorResponse{
 			Error:   "invalid_request",
@@ -34,9 +37,14 @@ func (h *BaseServer) AuthorizeHandler(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	
+
 	// Validate required fields
 	if authRequest.Subject == "" || authRequest.Action == "" || authRequest.Resource == "" {
+		h.log.Warn().
+			Str("subject", authRequest.Subject).
+			Str("action", authRequest.Action).
+			Str("resource", authRequest.Resource).
+			Msg("Authorization request missing required fields")
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(ErrorResponse{
 			Error:   "validation_error",
@@ -44,20 +52,60 @@ func (h *BaseServer) AuthorizeHandler(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	
-	// TODO: Implement actual authorization logic that works across all models
-	// For now, return a placeholder response
+
+	h.log.Debug().
+		Str("subject", authRequest.Subject).
+		Str("action", authRequest.Action).
+		Str("resource", authRequest.Resource).
+		Msg("Processing authorization request")
+
+	// Create evaluator and perform authorization evaluation using service layer
+	decision, err := h.service.AuthorizeRequest(r.Context(), &authRequest)
+	if err != nil {
+		h.log.Error().Err(err).Msg("Authorization evaluation failed")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(ErrorResponse{
+			Error:   "evaluation_error",
+			Message: "Failed to evaluate authorization request",
+		})
+		return
+	}
+
 	decisionTime := time.Since(start).Milliseconds()
-	
-	response := AuthorizationResponse{
-		Allowed:        false, // Default deny
-		Reason:         "Authorization engine not fully implemented",
-		PolicyID:       "",
+
+	response := service.AuthorizationResponse{
+		Allowed:        decision.Permit,
+		Reason:         decision.Reason,
+		PolicyID:       h.extractPolicyID(decision),
 		DecisionTimeMs: decisionTime,
 	}
-	
+
+	h.log.Info().
+		Bool("allowed", response.Allowed).
+		Str("subject", authRequest.Subject).
+		Str("action", authRequest.Action).
+		Str("resource", authRequest.Resource).
+		Int64("decision_time_ms", decisionTime).
+		Msg("Authorization decision completed")
+
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(response)
+}
+
+// extractPolicyID extracts a policy identifier from the decision for audit purposes
+func (h *BaseServer) extractPolicyID(decision *service.Decision) string {
+	if decision == nil || len(decision.PolicyPath) == 0 {
+		return ""
+	}
+
+	// Use the last entity in the policy path as a simple policy identifier
+	// In a more sophisticated implementation, this might extract actual policy IDs
+	lastEntity := decision.PolicyPath[len(decision.PolicyPath)-1]
+	if lastEntity != nil {
+		return lastEntity.HashID
+	}
+
+	return ""
 }
 
 // CreatePolicyHandler creates a new policy

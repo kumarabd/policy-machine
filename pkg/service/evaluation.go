@@ -6,27 +6,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/kumarabd/gokit/logger"
 	"github.com/kumarabd/policy-machine/pkg/model"
 )
-
-// Request represents an access request
-type Request struct {
-	Subject     *model.Subject    `json:"subject"`
-	Resource    *model.Resource   `json:"resource"`
-	Actions     []string          `json:"actions"`
-	Context     map[string]string `json:"context,omitempty"`
-	PolicyClass string            `json:"policy_class,omitempty"`
-	SessionID   string            `json:"session_id,omitempty"`
-}
-
-// Response represents the response to an access request
-type Response struct {
-	Decision    *Decision     `json:"decision"`
-	Request     *Request      `json:"request"`
-	ProcessTime time.Duration `json:"process_time"`
-	Error       string        `json:"error,omitempty"`
-}
 
 type Decision struct {
 	Permit       bool                 `json:"permit"`
@@ -54,6 +35,16 @@ type Subgraph struct {
 	ReverseRels   map[string][]model.Relationship // targetID -> []Relationships
 }
 
+// EvaluationRequest represents an internal policy evaluation request with resolved entities
+type EvaluationRequest struct {
+	Subject     model.Entity      `json:"subject"`
+	Resource    model.Entity      `json:"resource"`
+	Actions     []string          `json:"actions"`
+	PolicyClass string            `json:"policy_class"`
+	Context     map[string]string `json:"context,omitempty"`
+	RequestID   string            `json:"request_id,omitempty"`
+}
+
 // Context holds the context for path computation
 type Context struct {
 	PolicyClass string            `json:"policy_class"`
@@ -67,28 +58,16 @@ type Context struct {
 	TargetActions []string
 }
 
-type Evaluator struct {
-	log       *logger.Handler
-	datalayer DataHandler
-}
-
-func NewEvaluator(l *logger.Handler, d DataHandler) *Evaluator {
-	return &Evaluator{
-		log:       l,
-		datalayer: d,
-	}
-}
-
-func (h *Evaluator) EvaluatePolicy(ctx context.Context, req *Request) (*Decision, error) {
+func (h *Handler) EvaluatePolicy(ctx context.Context, req *EvaluationRequest) (*Decision, error) {
 	startTime := time.Now()
 
 	h.log.Debug().
-		Str("subject", req.Subject.EntityID).
-		Str("resource", req.Resource.EntityID).
+		Str("subject", req.Subject.HashID).
+		Str("resource", req.Resource.HashID).
 		Strs("actions", req.Actions).
 		Msg("Starting  access evaluation")
 
-	privilegePaths, err := h.evaluatePathsUsingSubgraphs(req.PolicyClass, req.Subject.DeepCopy(), req.Resource.DeepCopy(), req.Actions)
+	privilegePaths, err := h.evaluatePathsUsingSubgraphs(req.PolicyClass, req.Subject, req.Resource, req.Actions)
 	if err != nil {
 		return nil, fmt.Errorf("failed to find privilege paths: %w", err)
 	}
@@ -154,7 +133,7 @@ func (h *Evaluator) EvaluatePolicy(ctx context.Context, req *Request) (*Decision
 }
 
 // evaluatePathsUsingSubgraphs implements the new efficient subgraph-based algorithm
-func (h *Evaluator) evaluatePathsUsingSubgraphs(class string, subjectEntity model.Entity, resourceEntity model.Entity, targetActions []string) ([]*Path, error) {
+func (h *Handler) evaluatePathsUsingSubgraphs(class string, subjectEntity model.Entity, resourceEntity model.Entity, targetActions []string) ([]*Path, error) {
 	h.log.Debug().Msgf("Starting subgraph-based evaluation from %s to %s for actions %v", subjectEntity.HashID, resourceEntity.HashID, targetActions)
 
 	// Step 1 & 2: Build subgraphs concurrently
@@ -200,7 +179,7 @@ func (h *Evaluator) evaluatePathsUsingSubgraphs(class string, subjectEntity mode
 }
 
 // buildSubgraph builds a subgraph starting from the given node using BFS
-func (h *Evaluator) buildSubgraph(startNodeID string, graphType string) (*Subgraph, error) {
+func (h *Handler) buildSubgraph(startNodeID string, graphType string) (*Subgraph, error) {
 	h.log.Debug().Msgf("Building %s subgraph from node %s", graphType, startNodeID)
 
 	subgraph := &Subgraph{
@@ -217,8 +196,10 @@ func (h *Evaluator) buildSubgraph(startNodeID string, graphType string) (*Subgra
 
 	// Get the starting entity
 	startEntity := &model.Entity{}
-	if err := h.datalayer.FetchEntityForID(startNodeID, startEntity); err != nil {
-		return nil, fmt.Errorf("error fetching start entity %s: %w", startNodeID, err)
+	if err := h.store.FetchEntityForID(startNodeID, startEntity); err != nil {
+		// For start entities (subjects/resources), we should fail if not found
+		// as they are the core entities being evaluated
+		return nil, fmt.Errorf("start entity %s not found: %w", startNodeID, err)
 	}
 	subgraph.Nodes[startNodeID] = *startEntity
 
@@ -231,7 +212,7 @@ func (h *Evaluator) buildSubgraph(startNodeID string, graphType string) (*Subgra
 
 			// Fetch all relationships where current node is the source
 			relationships := make([]model.Relationship, 0)
-			if err := h.datalayer.FetchRelationshipsForSource(currentNodeID, &relationships); err != nil {
+			if err := h.store.FetchRelationshipsForSource(currentNodeID, &relationships); err != nil {
 				h.log.Debug().Msgf("Error fetching relationships for %s: %v", currentNodeID, err)
 				continue
 			}
@@ -248,8 +229,11 @@ func (h *Evaluator) buildSubgraph(startNodeID string, graphType string) (*Subgra
 				// Add target entity to subgraph if not already visited
 				if !visited[rel.ToID] {
 					targetEntity := &model.Entity{}
-					if err := h.datalayer.FetchEntityForID(rel.ToID, targetEntity); err != nil {
-						continue // Skip if entity not found
+					if err := h.store.FetchEntityForID(rel.ToID, targetEntity); err != nil {
+						h.log.Debug().Err(err).Str("node_id", rel.ToID).Msg("Target entity not found during graph traversal, skipping")
+						// Skip broken references during graph traversal
+						// This allows evaluation to continue even with some missing intermediate entities
+						continue
 					}
 
 					subgraph.Nodes[rel.ToID] = *targetEntity
@@ -268,7 +252,7 @@ func (h *Evaluator) buildSubgraph(startNodeID string, graphType string) (*Subgra
 }
 
 // findPathsThroughIntersections finds paths by identifying intersection points between subgraphs
-func (h *Evaluator) findPathsThroughIntersections(context *Context, subjectEntity model.Entity, resourceEntity model.Entity) ([]*Path, error) {
+func (h *Handler) findPathsThroughIntersections(context *Context, subjectEntity model.Entity, resourceEntity model.Entity) ([]*Path, error) {
 	h.log.Debug().Msgf("Finding paths through subgraph intersections")
 
 	var validPaths []*Path
@@ -340,7 +324,7 @@ func (h *Evaluator) findPathsThroughIntersections(context *Context, subjectEntit
 }
 
 // findNodesWithAssociations finds all nodes in the subgraph that have association relationships
-func (h *Evaluator) findNodesWithAssociations(subgraph *Subgraph) []string {
+func (h *Handler) findNodesWithAssociations(subgraph *Subgraph) []string {
 	var nodesWithAssociations []string
 
 	for nodeID, relationships := range subgraph.Relationships {
@@ -356,7 +340,7 @@ func (h *Evaluator) findNodesWithAssociations(subgraph *Subgraph) []string {
 }
 
 // getAssociationsForNode gets all associations originating from a node
-func (h *Evaluator) getAssociationsForNode(class string, nodeID string, subgraph *Subgraph) []*model.Association {
+func (h *Handler) getAssociationsForNode(class string, nodeID string, subgraph *Subgraph) []*model.Association {
 	var associations []*model.Association
 
 	relationships, exists := subgraph.Relationships[nodeID]
@@ -371,7 +355,7 @@ func (h *Evaluator) getAssociationsForNode(class string, nodeID string, subgraph
 				ClassName:      class,
 			}
 			// Fetch the full association details
-			if err := h.datalayer.FetchAssociation(assoc, true); err == nil {
+			if err := h.store.FetchAssociation(assoc, true); err == nil {
 				associations = append(associations, assoc)
 			}
 		}
@@ -381,7 +365,7 @@ func (h *Evaluator) getAssociationsForNode(class string, nodeID string, subgraph
 }
 
 // associationHasRequiredActions checks if an association has the required actions
-func (h *Evaluator) associationHasRequiredActions(assoc *model.Association, targetActions []string) bool {
+func (h *Handler) associationHasRequiredActions(assoc *model.Association, targetActions []string) bool {
 	if len(targetActions) == 0 {
 		return true // No specific actions required
 	}
@@ -408,7 +392,7 @@ func (h *Evaluator) associationHasRequiredActions(assoc *model.Association, targ
 }
 
 // pathHasRequiredActions checks if a path has the required actions
-func (h *Evaluator) pathHasRequiredActions(path *Path, targetActions []string) bool {
+func (h *Handler) pathHasRequiredActions(path *Path, targetActions []string) bool {
 	if len(targetActions) == 0 {
 		return true // No specific actions required
 	}
@@ -419,7 +403,7 @@ func (h *Evaluator) pathHasRequiredActions(path *Path, targetActions []string) b
 			assoc := &model.Association{
 				RelationshipID: edge.HashID,
 			}
-			if err := h.datalayer.FetchAssociation(assoc, true); err == nil {
+			if err := h.store.FetchAssociation(assoc, true); err == nil {
 				if h.associationHasRequiredActions(assoc, targetActions) {
 					return true
 				}
@@ -440,7 +424,7 @@ func (h *Evaluator) pathHasRequiredActions(path *Path, targetActions []string) b
 }
 
 // findPathInSubgraph finds a path between two nodes within a subgraph using BFS
-func (h *Evaluator) findPathInSubgraph(class string, subgraph *Subgraph, startNodeID, endNodeID string) *Path {
+func (h *Handler) findPathInSubgraph(class string, subgraph *Subgraph, startNodeID, endNodeID string) *Path {
 	if startNodeID == endNodeID {
 		// Direct path with just the start node
 		if entity, exists := subgraph.Nodes[startNodeID]; exists {
@@ -486,7 +470,7 @@ func (h *Evaluator) findPathInSubgraph(class string, subgraph *Subgraph, startNo
 }
 
 // reconstructPath reconstructs a path from parent pointers
-func (h *Evaluator) reconstructPath(class string, subgraph *Subgraph, startNodeID, endNodeID string, parent map[string]string, parentRel map[string]*model.Relationship) *Path {
+func (h *Handler) reconstructPath(class string, subgraph *Subgraph, startNodeID, endNodeID string, parent map[string]string, parentRel map[string]*model.Relationship) *Path {
 	var nodes []model.Entity
 	var edges []model.Relationship
 	var actions []string
@@ -521,7 +505,7 @@ func (h *Evaluator) reconstructPath(class string, subgraph *Subgraph, startNodeI
 						RelationshipID: rel.HashID,
 						ClassName:      class,
 					}
-					if err := h.datalayer.FetchAssociation(assoc, true); err == nil {
+					if err := h.store.FetchAssociation(assoc, true); err == nil {
 						actions = append(actions, assoc.Verbs...)
 					}
 				}
@@ -537,7 +521,7 @@ func (h *Evaluator) reconstructPath(class string, subgraph *Subgraph, startNodeI
 }
 
 // combinePaths combines three path segments: subject->assocSource, association, intersection->resource
-func (h *Evaluator) combinePaths(subjectToAssocSource *Path, assoc *model.Association, intersectionToResource *Path) *Path {
+func (h *Handler) combinePaths(subjectToAssocSource *Path, assoc *model.Association, intersectionToResource *Path) *Path {
 	var nodes []model.Entity
 	var edges []model.Relationship
 	var actions []string
@@ -568,13 +552,13 @@ func (h *Evaluator) combinePaths(subjectToAssocSource *Path, assoc *model.Associ
 }
 
 // checkProhibitionsForRequest checks if any prohibitions apply to the request
-func (h *Evaluator) checkProhibitionsForRequest(_ context.Context, req *Request, privilegePaths []*Path) ([]*model.Prohibition, error) {
-	h.log.Debug().Msgf("Checking prohibitions for subject %s on resource %s", req.Subject.EntityID, req.Resource.EntityID)
+func (h *Handler) checkProhibitionsForRequest(_ context.Context, req *EvaluationRequest, privilegePaths []*Path) ([]*model.Prohibition, error) {
+	h.log.Debug().Msgf("Checking prohibitions for subject %s on resource %s", req.Subject.HashID, req.Resource.HashID)
 
 	var applicableProhibitions []*model.Prohibition
 
 	// Get all prohibitions for the policy class
-	prohibitions, err := h.datalayer.FetchProhibitionsForPolicyClass(req.PolicyClass)
+	prohibitions, err := h.store.FetchProhibitionsForPolicyClass(req.PolicyClass)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch prohibitions for policy class %s: %w", req.PolicyClass, err)
 	}
@@ -593,7 +577,7 @@ func (h *Evaluator) checkProhibitionsForRequest(_ context.Context, req *Request,
 }
 
 // prohibitionApplies checks if a prohibition applies to the current request
-func (h *Evaluator) prohibitionApplies(prohibition *model.Prohibition, req *Request, privilegePaths []*Path) bool {
+func (h *Handler) prohibitionApplies(prohibition *model.Prohibition, req *EvaluationRequest, privilegePaths []*Path) bool {
 	// Check if prohibition applies to any of the requested actions
 	for _, action := range req.Actions {
 		if prohibition.HasOperation(action) {
@@ -607,7 +591,7 @@ func (h *Evaluator) prohibitionApplies(prohibition *model.Prohibition, req *Requ
 }
 
 // prohibitionIntersectsWithPaths checks if a prohibition intersects with any of the privilege paths
-func (h *Evaluator) prohibitionIntersectsWithPaths(prohibition *model.Prohibition, req *Request, privilegePaths []*Path) bool {
+func (h *Handler) prohibitionIntersectsWithPaths(prohibition *model.Prohibition, req *EvaluationRequest, privilegePaths []*Path) bool {
 	if prohibition.Relationship == nil {
 		return false
 	}
@@ -615,7 +599,7 @@ func (h *Evaluator) prohibitionIntersectsWithPaths(prohibition *model.Prohibitio
 	// Check if the prohibition applies to the subject or any entity in the privilege paths
 	for _, path := range privilegePaths {
 		// Check if prohibition applies to the subject
-		if prohibition.Relationship.FromID == req.Subject.EntityID {
+		if prohibition.Relationship.FromID == req.Subject.HashID {
 			return true
 		}
 
@@ -627,7 +611,7 @@ func (h *Evaluator) prohibitionIntersectsWithPaths(prohibition *model.Prohibitio
 		}
 
 		// Check if prohibition denies access to the resource or any attribute containing it
-		if prohibition.Relationship.ToID == req.Resource.EntityID {
+		if prohibition.Relationship.ToID == req.Resource.HashID {
 			return true
 		}
 
@@ -643,7 +627,7 @@ func (h *Evaluator) prohibitionIntersectsWithPaths(prohibition *model.Prohibitio
 }
 
 // extractObligations extracts obligations from privilege paths
-func (h *Evaluator) extractObligations(privilegePaths []*Path) []string {
+func (h *Handler) extractObligations(privilegePaths []*Path) []string {
 	obligationSet := make(map[string]struct{})
 	var obligations []string
 
@@ -656,7 +640,7 @@ func (h *Evaluator) extractObligations(privilegePaths []*Path) []string {
 				assoc := &model.Association{
 					RelationshipID: edge.HashID,
 				}
-				if err := h.datalayer.FetchAssociation(assoc, true); err == nil {
+				if err := h.store.FetchAssociation(assoc, true); err == nil {
 					// Add obligations from this association
 					for _, obligation := range assoc.Obligations {
 						if _, exists := obligationSet[obligation]; !exists {
@@ -674,7 +658,7 @@ func (h *Evaluator) extractObligations(privilegePaths []*Path) []string {
 }
 
 // extractPolicyPath extracts the policy path from privilege paths for audit/debugging
-func (h *Evaluator) extractPolicyPath(privilegePaths []*Path) []*model.Entity {
+func (h *Handler) extractPolicyPath(privilegePaths []*Path) []*model.Entity {
 	if len(privilegePaths) == 0 {
 		return nil
 	}
@@ -695,7 +679,7 @@ func (h *Evaluator) extractPolicyPath(privilegePaths []*Path) []*model.Entity {
 
 // // Legacy function - kept for backward compatibility but replaced by subgraph approach
 // // TODO: Remove this function after migration is complete
-// func (h *Evaluator) getPaths(class string, subjectEntity model.Entity, resourceEntity model.Entity, targetActions []string) ([]*Path, error) {
+// func (h *Handler) getPaths(class string, subjectEntity model.Entity, resourceEntity model.Entity, targetActions []string) ([]*Path, error) {
 // 	h.log.Debug().Msgf("Using legacy path evaluation - consider migrating to subgraph approach")
 // 	return h.evaluatePathsUsingSubgraphs(class, subjectEntity, resourceEntity, targetActions)
 // }
