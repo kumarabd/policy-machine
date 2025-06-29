@@ -33,6 +33,7 @@ type Subgraph struct {
 	Nodes         map[string]model.Entity         // nodeID -> Entity
 	Relationships map[string][]model.Relationship // sourceID -> []Relationships
 	ReverseRels   map[string][]model.Relationship // targetID -> []Relationships
+	Associations  map[string]*model.Association   // relationshipID -> Association (cached during build)
 }
 
 // EvaluationRequest represents an internal policy evaluation request with resolved entities
@@ -56,6 +57,8 @@ type Context struct {
 	SubjectGraph  *Subgraph
 	ResourceGraph *Subgraph
 	TargetActions []string
+	// Cached data
+	Prohibitions []*model.Prohibition // Cached prohibitions for policy class
 }
 
 func (h *Handler) EvaluatePolicy(ctx context.Context, req *EvaluationRequest) (*Decision, error) {
@@ -67,7 +70,8 @@ func (h *Handler) EvaluatePolicy(ctx context.Context, req *EvaluationRequest) (*
 		Strs("actions", req.Actions).
 		Msg("Starting  access evaluation")
 
-	privilegePaths, err := h.evaluatePathsUsingSubgraphs(req.PolicyClass, req.Subject, req.Resource, req.Actions)
+	// Step 1: Initialize evaluation context and run evaluation
+	privilegePaths, evalContext, err := h.evaluatePathsUsingSubgraphs(req.PolicyClass, req.Subject, req.Resource, req.Actions)
 	if err != nil {
 		return nil, fmt.Errorf("failed to find privilege paths: %w", err)
 	}
@@ -85,8 +89,8 @@ func (h *Handler) EvaluatePolicy(ctx context.Context, req *EvaluationRequest) (*
 		}, nil
 	}
 
-	// Step 2: Check for applicable prohibitions
-	prohibitions, err := h.checkProhibitionsForRequest(ctx, req, privilegePaths)
+	// Step 2: Check for applicable prohibitions using cached data
+	prohibitions, err := h.checkProhibitionsFromContext(ctx, req, privilegePaths, evalContext)
 	if err != nil {
 		return nil, fmt.Errorf("failed to check prohibitions: %w", err)
 	}
@@ -106,7 +110,7 @@ func (h *Handler) EvaluatePolicy(ctx context.Context, req *EvaluationRequest) (*
 	}
 
 	// Step 3: Extract obligations from privilege paths
-	obligations := h.extractObligations(privilegePaths)
+	obligations := h.extractObligations(privilegePaths, evalContext)
 
 	// Access is granted
 	decision := &Decision{
@@ -133,7 +137,7 @@ func (h *Handler) EvaluatePolicy(ctx context.Context, req *EvaluationRequest) (*
 }
 
 // evaluatePathsUsingSubgraphs implements the new efficient subgraph-based algorithm
-func (h *Handler) evaluatePathsUsingSubgraphs(class string, subjectEntity model.Entity, resourceEntity model.Entity, targetActions []string) ([]*Path, error) {
+func (h *Handler) evaluatePathsUsingSubgraphs(class string, subjectEntity model.Entity, resourceEntity model.Entity, targetActions []string) ([]*Path, *Context, error) {
 	h.log.Debug().Msgf("Starting subgraph-based evaluation from %s to %s for actions %v", subjectEntity.HashID, resourceEntity.HashID, targetActions)
 
 	// Step 1 & 2: Build subgraphs concurrently
@@ -158,24 +162,32 @@ func (h *Handler) evaluatePathsUsingSubgraphs(class string, subjectEntity model.
 	wg.Wait()
 
 	if subjectErr != nil {
-		return nil, fmt.Errorf("error building subject subgraph: %w", subjectErr)
+		return nil, nil, fmt.Errorf("error building subject subgraph: %w", subjectErr)
 	}
 	if resourceErr != nil {
-		return nil, fmt.Errorf("error building resource subgraph: %w", resourceErr)
+		return nil, nil, fmt.Errorf("error building resource subgraph: %w", resourceErr)
 	}
 
 	h.log.Debug().Msgf("Built subgraphs - Subject: %d nodes, Resource: %d nodes",
 		len(subjectGraph.Nodes), len(resourceGraph.Nodes))
 
-	// Step 3-7: Find paths through association intersections
+	// Step 3: Fetch prohibitions for policy class (once per evaluation)
+	prohibitions, err := h.store.FetchProhibitionsForPolicyClass(class)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to fetch prohibitions for policy class %s: %w", class, err)
+	}
+
+	// Step 4-7: Find paths through association intersections
 	context := &Context{
 		PolicyClass:   class,
 		SubjectGraph:  subjectGraph,
 		ResourceGraph: resourceGraph,
 		TargetActions: targetActions,
+		Prohibitions:  prohibitions,
 	}
 
-	return h.findPathsThroughIntersections(context, subjectEntity, resourceEntity)
+	paths, err := h.findPathsThroughIntersections(context, subjectEntity, resourceEntity)
+	return paths, context, err
 }
 
 // buildSubgraph builds a subgraph starting from the given node using BFS
@@ -186,6 +198,7 @@ func (h *Handler) buildSubgraph(startNodeID string, graphType string) (*Subgraph
 		Nodes:         make(map[string]model.Entity),
 		Relationships: make(map[string][]model.Relationship),
 		ReverseRels:   make(map[string][]model.Relationship),
+		Associations:  make(map[string]*model.Association),
 	}
 
 	visited := make(map[string]bool)
@@ -225,6 +238,16 @@ func (h *Handler) buildSubgraph(startNodeID string, graphType string) (*Subgraph
 					subgraph.ReverseRels[rel.ToID] = make([]model.Relationship, 0)
 				}
 				subgraph.ReverseRels[rel.ToID] = append(subgraph.ReverseRels[rel.ToID], rel)
+
+				// Cache association details if this is an association relationship
+				if rel.Type == model.AssociationRelationship {
+					assoc := &model.Association{
+						RelationshipID: rel.HashID,
+					}
+					if err := h.store.FetchAssociation(assoc, true); err == nil {
+						subgraph.Associations[rel.HashID] = assoc
+					}
+				}
 
 				// Add target entity to subgraph if not already visited
 				if !visited[rel.ToID] {
@@ -350,13 +373,20 @@ func (h *Handler) getAssociationsForNode(class string, nodeID string, subgraph *
 
 	for _, rel := range relationships {
 		if rel.Type == model.AssociationRelationship {
-			assoc := &model.Association{
-				RelationshipID: rel.HashID,
-				ClassName:      class,
-			}
-			// Fetch the full association details
-			if err := h.store.FetchAssociation(assoc, true); err == nil {
-				associations = append(associations, assoc)
+			// Use cached association if available
+			if cachedAssoc, exists := subgraph.Associations[rel.HashID]; exists {
+				associations = append(associations, cachedAssoc)
+			} else {
+				// Fallback to database fetch if not cached
+				assoc := &model.Association{
+					RelationshipID: rel.HashID,
+					ClassName:      class,
+				}
+				if err := h.store.FetchAssociation(assoc, true); err == nil {
+					associations = append(associations, assoc)
+					// Cache for future use
+					subgraph.Associations[rel.HashID] = assoc
+				}
 			}
 		}
 	}
@@ -398,15 +428,11 @@ func (h *Handler) pathHasRequiredActions(path *Path, targetActions []string) boo
 	}
 
 	// Check if path has association relationships with required actions
-	for _, edge := range path.Edges {
-		if edge.Type == model.AssociationRelationship {
-			assoc := &model.Association{
-				RelationshipID: edge.HashID,
-			}
-			if err := h.store.FetchAssociation(assoc, true); err == nil {
-				if h.associationHasRequiredActions(assoc, targetActions) {
-					return true
-				}
+	// Note: This function now expects associations to be resolved in the path during construction
+	for _, action := range path.Actions {
+		for _, targetAction := range targetActions {
+			if action == targetAction {
+				return true
 			}
 		}
 	}
@@ -499,14 +525,21 @@ func (h *Handler) reconstructPath(class string, subgraph *Subgraph, startNodeID,
 			if rel, exists := parentRel[nodeID]; exists {
 				edges = append(edges, *rel)
 
-				// If it's an association, add its actions
+				// If it's an association, add its actions using cached data
 				if rel.Type == model.AssociationRelationship {
-					assoc := &model.Association{
-						RelationshipID: rel.HashID,
-						ClassName:      class,
-					}
-					if err := h.store.FetchAssociation(assoc, true); err == nil {
-						actions = append(actions, assoc.Verbs...)
+					if cachedAssoc, exists := subgraph.Associations[rel.HashID]; exists {
+						actions = append(actions, cachedAssoc.Verbs...)
+					} else {
+						// Fallback to database fetch if not cached
+						assoc := &model.Association{
+							RelationshipID: rel.HashID,
+							ClassName:      class,
+						}
+						if err := h.store.FetchAssociation(assoc, true); err == nil {
+							actions = append(actions, assoc.Verbs...)
+							// Cache for future use
+							subgraph.Associations[rel.HashID] = assoc
+						}
 					}
 				}
 			}
@@ -551,7 +584,26 @@ func (h *Handler) combinePaths(subjectToAssocSource *Path, assoc *model.Associat
 	}
 }
 
-// checkProhibitionsForRequest checks if any prohibitions apply to the request
+// checkProhibitionsFromContext checks if any prohibitions apply to the request using cached prohibitions
+func (h *Handler) checkProhibitionsFromContext(_ context.Context, req *EvaluationRequest, privilegePaths []*Path, evalContext *Context) ([]*model.Prohibition, error) {
+	h.log.Debug().Msgf("Checking prohibitions for subject %s on resource %s", req.Subject.HashID, req.Resource.HashID)
+
+	var applicableProhibitions []*model.Prohibition
+
+	h.log.Debug().Msgf("Found %d prohibitions for policy class %s", len(evalContext.Prohibitions), req.PolicyClass)
+
+	// Check each cached prohibition to see if it applies to this request
+	for _, prohibition := range evalContext.Prohibitions {
+		if h.prohibitionApplies(prohibition, req, privilegePaths) {
+			applicableProhibitions = append(applicableProhibitions, prohibition)
+			h.log.Debug().Msgf("Prohibition %s applies to request", prohibition.RelationshipID)
+		}
+	}
+
+	return applicableProhibitions, nil
+}
+
+// checkProhibitionsForRequest checks if any prohibitions apply to the request (legacy function kept for compatibility)
 func (h *Handler) checkProhibitionsForRequest(_ context.Context, req *EvaluationRequest, privilegePaths []*Path) ([]*model.Prohibition, error) {
 	h.log.Debug().Msgf("Checking prohibitions for subject %s on resource %s", req.Subject.HashID, req.Resource.HashID)
 
@@ -627,7 +679,7 @@ func (h *Handler) prohibitionIntersectsWithPaths(prohibition *model.Prohibition,
 }
 
 // extractObligations extracts obligations from privilege paths
-func (h *Handler) extractObligations(privilegePaths []*Path) []string {
+func (h *Handler) extractObligations(privilegePaths []*Path, context *Context) []string {
 	obligationSet := make(map[string]struct{})
 	var obligations []string
 
@@ -637,15 +689,34 @@ func (h *Handler) extractObligations(privilegePaths []*Path) []string {
 		// Extract obligations from association relationships in the path
 		for _, edge := range path.Edges {
 			if edge.Type == model.AssociationRelationship {
-				assoc := &model.Association{
-					RelationshipID: edge.HashID,
+				// Try to use cached association from subject or resource subgraph
+				var cachedAssoc *model.Association
+				if assoc, exists := context.SubjectGraph.Associations[edge.HashID]; exists {
+					cachedAssoc = assoc
+				} else if assoc, exists := context.ResourceGraph.Associations[edge.HashID]; exists {
+					cachedAssoc = assoc
 				}
-				if err := h.store.FetchAssociation(assoc, true); err == nil {
-					// Add obligations from this association
-					for _, obligation := range assoc.Obligations {
+
+				if cachedAssoc != nil {
+					// Add obligations from cached association
+					for _, obligation := range cachedAssoc.Obligations {
 						if _, exists := obligationSet[obligation]; !exists {
 							obligationSet[obligation] = struct{}{}
 							obligations = append(obligations, obligation)
+						}
+					}
+				} else {
+					// Fallback to database fetch if not cached
+					assoc := &model.Association{
+						RelationshipID: edge.HashID,
+					}
+					if err := h.store.FetchAssociation(assoc, true); err == nil {
+						// Add obligations from this association
+						for _, obligation := range assoc.Obligations {
+							if _, exists := obligationSet[obligation]; !exists {
+								obligationSet[obligation] = struct{}{}
+								obligations = append(obligations, obligation)
+							}
 						}
 					}
 				}
