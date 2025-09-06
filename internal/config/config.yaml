@@ -1,0 +1,6 @@
+# Server configurations
+server:
+  http:
+    port: "8000"
+  grpc:
+    port: "8001"
