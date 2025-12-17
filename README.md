@@ -194,14 +194,22 @@ policy-machine/
 
 ## Documentation
 
-Comprehensive documentation is available in the `docs/` directory:
+Comprehensive documentation is available to help you understand and work with Policy Machine:
 
-- **[ARCHITECTURE.md](docs/ARCHITECTURE.md)**: System design, components, and data flow
-- **[ENGINE.md](docs/ENGINE.md)**: Engine implementation details and algorithms
-- **[CACHING.md](docs/CACHING.md)**: Multi-tier caching strategy and invalidation
-- **[DATABASE.md](docs/DATABASE.md)**: Schema design, indexing, and query patterns
-- **[INCREMENTAL_REFRESH.md](docs/INCREMENTAL_REFRESH.md)**: Change tracking and snapshot updates
-- **[Agent.md](Agent.md)**: Cursor AI development rules and conventions
+### Getting Started
+- **[README.md](README.md)**: This file - project overview, quick start, and basic usage
+
+### Architecture & Design
+- **[ARCHITECTURE.md](docs/ARCHITECTURE.md)**: System design, components, data flow, and architectural decisions
+- **[ENGINE.md](docs/ENGINE.md)**: Detailed engine implementation, algorithms, and decision logic
+- **[CACHING.md](docs/CACHING.md)**: Multi-tier caching strategy, invalidation patterns, and performance optimization
+- **[DATABASE.md](docs/DATABASE.md)**: Complete database schema, indexing strategy, and query patterns
+- **[INCREMENTAL_REFRESH.md](docs/INCREMENTAL_REFRESH.md)**: Change tracking, copy-on-write updates, and incremental refresh mechanisms
+
+### Development
+- **[Agent.md](Agent.md)**: Cursor AI development rules, coding standards, and implementation guidelines
+
+Each documentation file provides in-depth coverage of its topic with code examples, performance characteristics, and best practices.
 
 ## Development
 
