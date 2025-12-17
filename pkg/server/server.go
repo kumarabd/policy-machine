@@ -36,6 +36,13 @@ func formatTitle(name string) string {
 }
 
 func New(l *logger.Handler, m *metrics.Handler, config *Config, eng *engine.Engine) (*Handler, error) {
+	// Ensure Base config is initialized
+	if config.Base == nil {
+		config.Base = &BaseServerConfig{
+			Port: 8500, // Default port
+		}
+	}
+
 	// Update Swagger info with actual config values
 	docs.SwaggerInfo.Host = fmt.Sprintf("localhost:%d", config.Base.Port)
 	docs.SwaggerInfo.Title = fmt.Sprintf("%s API", formatTitle(config.Name))

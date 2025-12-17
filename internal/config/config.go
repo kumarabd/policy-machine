@@ -25,7 +25,11 @@ type Config struct {
 func New() (*Config, error) {
 	// Create default config object
 	configObject := &Config{
-		Server:   &server.Config{},
+		Server: &server.Config{
+			Base: &server.BaseServerConfig{
+				Port: 8500, // Default port
+			},
+		},
 		Engine:   &engine.Config{},
 		Metrics:  &metrics.Options{},
 		Postgres: &postgres.Options{},
