@@ -7,12 +7,13 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/kumarabd/gokit/logger"
-	"github.com/kumarabd/policy-machine/internal/metrics"
-	"github.com/kumarabd/policy-machine/pkg/service"
 	"github.com/kumarabd/policy-machine/docs"
+	"github.com/kumarabd/policy-machine/internal/metrics"
+	"github.com/kumarabd/policy-machine/pkg/engine"
 )
 
 type Config struct {
+	Name string            `json:"name" yaml:"name"`
 	Base *BaseServerConfig `json:"base" yaml:"base"`
 }
 
@@ -34,18 +35,18 @@ func formatTitle(name string) string {
 	return strings.Join(parts, " ")
 }
 
-func New(name string, l *logger.Handler, m *metrics.Handler, config *Config, service *service.Handler) (*Handler, error) {
+func New(l *logger.Handler, m *metrics.Handler, config *Config, eng *engine.Engine) (*Handler, error) {
 	// Update Swagger info with actual config values
 	docs.SwaggerInfo.Host = fmt.Sprintf("localhost:%d", config.Base.Port)
-	docs.SwaggerInfo.Title = fmt.Sprintf("%s API", formatTitle(name))
-	
+	docs.SwaggerInfo.Title = fmt.Sprintf("%s API", formatTitle(config.Name))
+
 	l.Info().Msgf("Swagger UI will be available at: http://localhost:%d/swagger/index.html", config.Base.Port)
-	
+
 	// Initiate Base Server object
 	httpObj := &BaseServer{
-		log:     l,
-		service: service,
-		metric:  m,
+		log:    l,
+		engine: eng,
+		metric: m,
 	}
 	httpObj.handler = chi.NewRouter()
 	// Register all routes

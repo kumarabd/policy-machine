@@ -2,13 +2,15 @@
 server:
   base:
     port: 8500
+engine:
+  tenant_id: tenant1
 postgres:
   endpoint: 
     username: policy
     password: password123
     host: localhost
-    port: 5433
-    db: policy-machine
+    port: 5432
+    db: policy
     ssl_mode: disable
   dial_timeout_seconds: 10
   max_retries: 5

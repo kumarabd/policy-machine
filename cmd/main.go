@@ -54,9 +54,9 @@ import (
 	"github.com/kumarabd/gokit/logger"
 	"github.com/kumarabd/policy-machine/internal/config"
 	"github.com/kumarabd/policy-machine/internal/metrics"
+	"github.com/kumarabd/policy-machine/pkg/engine"
 	"github.com/kumarabd/policy-machine/pkg/postgres"
 	"github.com/kumarabd/policy-machine/pkg/server"
-	"github.com/kumarabd/policy-machine/pkg/service"
 )
 
 // main is the entry point of the application
@@ -84,24 +84,19 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Initialize in-memory cache layer
+	// Initialize database handler
 	dbHandler, err := postgres.New(configHandler.Postgres)
 	if err != nil {
-		log.Error().Err(err).Msg("cache initialization failed")
+		log.Error().Err(err).Msg("database initialization failed")
 		os.Exit(1)
 	}
 
-	// Initialize a new service with the logger, metrics handler, data layer, and service configuration
-	service, err := service.New(log, metricsHandler, configHandler.Service)
-	if err != nil {
-		log.Error().Err(err).Msg("service initialization failed")
-		os.Exit(1)
-	}
-	service.InitStore(dbHandler)
-	log.Info().Msg("service initialized")
+	// Initialize a new engine with the logger, metrics handler, database handler, and engine configuration
+	engine := engine.New(log, metricsHandler, dbHandler, configHandler.Engine, nil)
+	log.Info().Msg("engine initialized")
 
-	// Initialize a new server with the logger, metrics handler, server configuration, and service
-	srv, err := server.New(config.ApplicationName, log, metricsHandler, configHandler.Server, service)
+	// Initialize a new server with the logger, metrics handler, server configuration, and engine
+	srv, err := server.New(log, metricsHandler, configHandler.Server, engine)
 	if err != nil {
 		log.Error().Err(err).Msg("")
 		os.Exit(1)
@@ -120,7 +115,7 @@ func main() {
 	signalChan := make(chan os.Signal, 1)
 	signal.Notify(signalChan, syscall.SIGINT, syscall.SIGTERM)
 
-	// Wait for a stop signal or service/server completion
+	// Wait for a stop signal or engine/server completion
 	exit := false
 	for !exit {
 		select {

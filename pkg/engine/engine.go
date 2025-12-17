@@ -1,0 +1,307 @@
+package engine
+
+import (
+	"context"
+	"sync"
+	"sync/atomic"
+	"time"
+
+	"github.com/RoaringBitmap/roaring"
+	"github.com/google/uuid"
+	"github.com/kumarabd/gokit/logger"
+	"github.com/kumarabd/policy-machine/internal/metrics"
+	"github.com/kumarabd/policy-machine/pkg/postgres"
+)
+
+type Config struct {
+	TenantID uuid.UUID
+}
+
+type Engine struct {
+	log      *logger.Handler
+	metric   *metrics.Handler
+	db       *postgres.Handler
+	tenantID uuid.UUID
+
+	cur atomic.Pointer[Snapshot]
+
+	// Closure caches (TTL-based). Keep separate for UA/OA.
+	uaCache closureCache[uuid.UUID]
+	oaCache closureCache[uuid.UUID]
+
+	// UserOP caches (TTL-based).
+	allowCache *userOpBitmapCache
+	denyCache  *userOpBitmapCache
+
+	uaNodeClosure closureCache[uint32] // uaIdx -> bitmap of reachable UAs (including itself)
+	oaNodeClosure closureCache[uint32] // oaIdx -> bitmap of reachable OAs (including itself)
+	oaDescClosure closureCache[uint32] // oaIdx -> bitmap(descendants + self)
+
+	decisions *indexedDecisionCache
+
+	// To lock in the refresh operation
+	refreshMu sync.Mutex
+
+	emitter ObligationEmitter
+}
+
+func New(log *logger.Handler, metric *metrics.Handler, db *postgres.Handler, cfg *Config, emitter ObligationEmitter) *Engine {
+	e := &Engine{
+		log:           log,
+		metric:        metric,
+		db:            db,
+		tenantID:      cfg.TenantID,
+		uaCache:       newClosureCache[uuid.UUID](2 * time.Minute),
+		oaCache:       newClosureCache[uuid.UUID](2 * time.Minute),
+		allowCache:    newUserOpBitmapCache(2 * time.Minute),
+		denyCache:     newUserOpBitmapCache(2 * time.Minute),
+		uaNodeClosure: newClosureCache[uint32](10 * time.Minute),
+		oaNodeClosure: newClosureCache[uint32](10 * time.Minute),
+		oaDescClosure: newClosureCache[uint32](10 * time.Minute),
+		decisions:     newIndexedDecisionCache(60 * time.Second),
+		emitter:       emitter,
+	}
+	return e
+}
+
+// Refresh rebuilds the in-memory snapshot and swaps it atomically.
+func (e *Engine) Refresh(ctx context.Context) error {
+	snap, err := LoadSnapshot(ctx, e.db.H, e.tenantID)
+	if err != nil {
+		return err
+	}
+
+	var rev postgres.PolicyRevision
+	_ = e.db.H.WithContext(ctx).First(&rev, "tenant_id = ?", e.tenantID).Error
+	snap.Version = rev.Revision
+
+	var maxSeq int64
+	e.db.H.WithContext(ctx).
+		Model(&postgres.PolicyChange{}).
+		Where("tenant_id = ?", e.tenantID).
+		Select("COALESCE(MAX(seq), 0)").
+		Scan(&maxSeq)
+	snap.LastSeq = maxSeq
+
+	e.cur.Store(snap)
+
+	// Invalidate caches on policy change (simple + safe).
+	e.uaCache.Clear()
+	e.oaCache.Clear()
+	e.allowCache.Clear()
+	e.denyCache.Clear()
+	e.uaNodeClosure.Clear()
+	e.oaNodeClosure.Clear()
+	e.decisions.Clear()
+	return nil
+}
+
+func (e *Engine) Snapshot() *Snapshot {
+	s := e.cur.Load()
+	return s
+}
+
+// --- Decision (uses closures + bitmaps + cache) ---
+func (e *Engine) allowedFor(s *Snapshot, user uuid.UUID, op string, uaClosure *roaring.Bitmap) *roaring.Bitmap {
+	if b, ok := e.allowCache.Get(user, op); ok {
+		return b
+	}
+	allowed := roaring.New()
+	it := uaClosure.Iterator()
+	for it.HasNext() {
+		ua := it.Next()
+		targets := s.assoc[ua][op] // bitmap of OA targets
+		if targets != nil {
+			it := targets.Iterator()
+			for it.HasNext() {
+				t := it.Next()
+				allowed.Or(e.oaNodeDescendants(s, t))
+			}
+		}
+	}
+	// Store immutable bitmap (don’t mutate later)
+	e.allowCache.Put(user, op, allowed)
+	return allowed
+}
+
+func (e *Engine) deniedFor(s *Snapshot, user uuid.UUID, op string, uaClosure *roaring.Bitmap) *roaring.Bitmap {
+	if b, ok := e.denyCache.Get(user, op); ok {
+		return b
+	}
+
+	denied := roaring.New()
+
+	// UA-level prohibitions (expand OA targets to descendants)
+	it := uaClosure.Iterator()
+	for it.HasNext() {
+		ua := it.Next()
+		opMap := s.uaProhibits[ua]
+		if opMap == nil {
+			continue
+		}
+		targets := opMap[op] // bitmap of OA targets
+		if targets == nil {
+			continue
+		}
+		tit := targets.Iterator()
+		for tit.HasNext() {
+			t := tit.Next()
+			denied.Or(e.oaNodeDescendants(s, t))
+		}
+	}
+
+	// user-level prohibitions (also expand)
+	if opMap := s.userProhibits[user]; opMap != nil {
+		if targets := opMap[op]; targets != nil {
+			tit := targets.Iterator()
+			for tit.HasNext() {
+				t := tit.Next()
+				denied.Or(e.oaNodeDescendants(s, t))
+			}
+		}
+	}
+
+	e.denyCache.Put(user, op, denied)
+	return denied
+}
+
+func (e *Engine) Decide(ctx context.Context, userID, objectID uuid.UUID, op string) (bool, error) {
+	s := e.Snapshot()
+	if s == nil {
+		if err := e.Refresh(ctx); err != nil {
+			return false, err
+		}
+		s = e.Snapshot()
+	}
+
+	// Decision cache hit?
+	if allowed, ok := e.decisions.Get(userID, objectID, op, s.Version); ok {
+		return allowed, nil
+	}
+
+	uaClosure := e.userUAClosure(s, userID)
+	oaClosure := e.objectOAClosure(s, objectID)
+
+	// Compute user and object policy classes
+	userPCs := roaring.New()
+	it := uaClosure.Iterator()
+	for it.HasNext() {
+		ua := it.Next()
+		if b := s.uaToPCs[ua]; b != nil {
+			userPCs.Or(b)
+		}
+	}
+
+	objPCs := roaring.New()
+	it2 := oaClosure.Iterator()
+	for it2.HasNext() {
+		oa := it2.Next()
+		if b := s.oaToPCs[oa]; b != nil {
+			objPCs.Or(b)
+		}
+	}
+
+	userPCs.And(objPCs)
+	if userPCs.IsEmpty() {
+		// No shared policy class => deny (and cache it)
+		e.decisions.Put(userID, objectID, op, false, s.Version)
+		return false, nil
+	}
+
+	allowedBmp := e.allowedFor(s, userID, op, uaClosure)
+	deniedBmp := e.deniedFor(s, userID, op, uaClosure)
+
+	// effective = (allowed - denied) ∩ oaClosure
+	effective := allowedBmp.Clone()
+	effective.AndNot(deniedBmp)
+	effective.And(oaClosure)
+
+	allowed := !effective.IsEmpty()
+
+	e.decisions.Put(userID, objectID, op, allowed, s.Version)
+	return allowed, nil
+}
+
+func (e *Engine) applyInvalidations(inv *invalidation) {
+	// 1) Invalidate node-level closure caches first (UA/OA)
+	for uaIdx := range inv.uaNodeClosures {
+		e.uaNodeClosure.Delete(uaIdx)
+	}
+	for oaIdx := range inv.oaNodeClosures {
+		e.oaNodeClosure.Delete(oaIdx)
+	}
+
+	// 2) UA closure changes => user UA-closure + any derived caches become stale
+	// (allow/deny/decisions depend on UA closure)
+	for u := range inv.usersUAClosure {
+		e.uaCache.Delete(u)
+		e.allowCache.DeleteUser(u)
+		e.denyCache.DeleteUser(u)
+		e.decisions.DeleteUser(u)
+	}
+
+	// 3) OA closure changes => object OA-closure + any decisions involving that object become stale
+	for o := range inv.objectsOAClosure {
+		e.oaCache.Delete(o)
+		e.decisions.DeleteObject(o)
+	}
+
+	// 4) Dedup ops across allow/deny invalidations (avoid double DeleteUserOp calls)
+	// opsByUser[u] = union(inv.userAllowOp[u], inv.userDenyOp[u])
+	opsByUser := make(map[uuid.UUID]map[string]struct{}, len(inv.userAllowOp)+len(inv.userDenyOp))
+
+	for u, ops := range inv.userAllowOp {
+		if opsByUser[u] == nil {
+			opsByUser[u] = make(map[string]struct{}, len(ops))
+		}
+		for op := range ops {
+			opsByUser[u][op] = struct{}{}
+		}
+	}
+	for u, ops := range inv.userDenyOp {
+		if opsByUser[u] == nil {
+			opsByUser[u] = make(map[string]struct{}, len(ops))
+		}
+		for op := range ops {
+			opsByUser[u][op] = struct{}{}
+		}
+	}
+
+	// 5) Invalidate (user,op) derived caches + decisions
+	for u, ops := range opsByUser {
+		for op := range ops {
+			// Safe to call even if not present
+			e.allowCache.DeleteUserOp(u, op)
+			e.denyCache.DeleteUserOp(u, op)
+			e.decisions.DeleteUserOp(u, op)
+		}
+	}
+	for u := range inv.usersDecisionsOnly {
+		e.decisions.DeleteUser(u)
+	}
+	for o := range inv.objectsDecisionsOnly {
+		e.decisions.DeleteObject(o)
+	}
+}
+
+func (e *Engine) oaNodeDescendants(s *Snapshot, oa uint32) *roaring.Bitmap {
+	if b, ok := e.oaDescClosure.Get(oa); ok {
+		return b
+	}
+
+	out := roaring.New()
+	queue := []uint32{oa}
+	out.Add(oa)
+
+	for i := 0; i < len(queue); i++ {
+		cur := queue[i]
+		for _, ch := range s.oaChildren[cur] {
+			if out.CheckedAdd(ch) {
+				queue = append(queue, ch)
+			}
+		}
+	}
+
+	e.oaDescClosure.Put(oa, out)
+	return out
+}
