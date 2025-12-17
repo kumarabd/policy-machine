@@ -1,7 +1,9 @@
 package engine
 
 import (
+	"container/list"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -21,8 +23,10 @@ type decisionEntry struct {
 
 type keySet map[decisionKey]struct{}
 
+// indexedDecisionCache is a bounded decision cache with LRU eviction and secondary indexes
 type indexedDecisionCache struct {
-	ttl time.Duration
+	ttl        time.Duration
+	maxEntries int
 
 	mu sync.RWMutex
 
@@ -30,43 +34,64 @@ type indexedDecisionCache struct {
 	byUser   map[uuid.UUID]keySet
 	byObject map[uuid.UUID]keySet
 	byUserOp map[uuid.UUID]map[string]keySet
+
+	// LRU tracking
+	ll       *list.List
+	lruIndex map[decisionKey]*list.Element
+
+	evictions      atomic.Uint64
+	expiredDeletes atomic.Uint64
 }
 
-func newIndexedDecisionCache(ttl time.Duration) *indexedDecisionCache {
-	return &indexedDecisionCache{
-		ttl:      ttl,
-		entries:  make(map[decisionKey]decisionEntry),
-		byUser:   make(map[uuid.UUID]keySet),
-		byObject: make(map[uuid.UUID]keySet),
-		byUserOp: make(map[uuid.UUID]map[string]keySet),
+func newIndexedDecisionCache(ttl time.Duration, maxEntries int) *indexedDecisionCache {
+	if maxEntries <= 0 {
+		maxEntries = 500000 // Default
 	}
+	return &indexedDecisionCache{
+		ttl:        ttl,
+		maxEntries: maxEntries,
+		entries:    make(map[decisionKey]decisionEntry),
+		byUser:     make(map[uuid.UUID]keySet),
+		byObject:   make(map[uuid.UUID]keySet),
+		byUserOp:   make(map[uuid.UUID]map[string]keySet),
+		ll:         list.New(),
+		lruIndex:   make(map[decisionKey]*list.Element),
+	}
+}
+
+// Len returns the current number of entries in the cache
+func (c *indexedDecisionCache) Len() int {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return len(c.entries)
 }
 
 func (c *indexedDecisionCache) Get(user, object uuid.UUID, op string, curRevision int64) (bool, bool) {
 	k := decisionKey{User: user, Object: object, Op: op}
 	now := time.Now()
 
-	c.mu.RLock()
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	e, ok := c.entries[k]
-	c.mu.RUnlock()
 	if !ok {
 		return false, false
 	}
 
 	// Expired? Clean it up lazily.
 	if now.After(e.Expires) {
-		c.mu.Lock()
-		// Re-check under write lock
-		if e2, ok2 := c.entries[k]; ok2 && now.After(e2.Expires) {
-			c.deleteKeyLocked(k)
-		}
-		c.mu.Unlock()
+		c.deleteKeyLocked(k)
 		return false, false
 	}
 
 	// Optional safety check: revision mismatch => treat as miss
 	if e.Revision != 0 && e.Revision != curRevision {
 		return false, false
+	}
+
+	// Update LRU position
+	if elem, ok := c.lruIndex[k]; ok {
+		c.ll.MoveToFront(elem)
 	}
 
 	return e.Allowed, true
@@ -83,7 +108,34 @@ func (c *indexedDecisionCache) Put(user, object uuid.UUID, op string, allowed bo
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	// If overwriting an existing key, we can keep indexes as-is (sets prevent dupes).
+	// Clean up a few expired entries
+	c.cleanupExpiredLocked(5)
+
+	// Check if we need to evict
+	for len(c.entries) >= c.maxEntries {
+		back := c.ll.Back()
+		if back == nil {
+			break
+		}
+		keyToEvict := back.Value.(decisionKey)
+		c.deleteKeyLocked(keyToEvict)
+		c.evictions.Add(1)
+	}
+
+	// If overwriting an existing key, update LRU position
+	if _, exists := c.entries[k]; exists {
+		if elem, ok := c.lruIndex[k]; ok {
+			c.ll.MoveToFront(elem)
+		}
+		c.entries[k] = e
+		return
+	}
+
+	// New entry: add to LRU
+	elem := c.ll.PushFront(k)
+	c.lruIndex[k] = elem
+
+	// Add to entries
 	c.entries[k] = e
 
 	// index: byUser
@@ -163,11 +215,36 @@ func (c *indexedDecisionCache) DeleteUserOp(user uuid.UUID, op string) {
 
 func (c *indexedDecisionCache) Clear() {
 	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	c.entries = make(map[decisionKey]decisionEntry)
 	c.byUser = make(map[uuid.UUID]keySet)
 	c.byObject = make(map[uuid.UUID]keySet)
 	c.byUserOp = make(map[uuid.UUID]map[string]keySet)
-	c.mu.Unlock()
+	c.ll = list.New()
+	c.lruIndex = make(map[decisionKey]*list.Element)
+}
+
+// cleanupExpiredLocked removes up to maxExpired expired entries from the back
+// Must be called with lock held
+func (c *indexedDecisionCache) cleanupExpiredLocked(maxExpired int) {
+	now := time.Now()
+	removed := 0
+	for removed < maxExpired {
+		back := c.ll.Back()
+		if back == nil {
+			break
+		}
+		k := back.Value.(decisionKey)
+		e, ok := c.entries[k]
+		if !ok || now.After(e.Expires) {
+			c.deleteKeyLocked(k)
+			c.expiredDeletes.Add(1)
+			removed++
+		} else {
+			break // No more expired entries
+		}
+	}
 }
 
 // --- internal helpers (must be called under write lock) ---
@@ -178,6 +255,12 @@ func (c *indexedDecisionCache) deleteKeyLocked(k decisionKey) {
 		return
 	}
 	delete(c.entries, k)
+
+	// Remove from LRU
+	if elem, ok := c.lruIndex[k]; ok {
+		c.ll.Remove(elem)
+		delete(c.lruIndex, k)
+	}
 
 	// byUser cleanup
 	if set := c.byUser[k.User]; set != nil {
@@ -207,4 +290,14 @@ func (c *indexedDecisionCache) deleteKeyLocked(k decisionKey) {
 			delete(c.byUserOp, k.User)
 		}
 	}
+}
+
+// Evictions returns the number of evictions that have occurred
+func (c *indexedDecisionCache) Evictions() uint64 {
+	return c.evictions.Load()
+}
+
+// ExpiredDeletes returns the number of expired entries deleted
+func (c *indexedDecisionCache) ExpiredDeletes() uint64 {
+	return c.expiredDeletes.Load()
 }

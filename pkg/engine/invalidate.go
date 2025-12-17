@@ -193,7 +193,12 @@ func computeInvalidations(inv *invalidation, s *Snapshot, ch postgres.PolicyChan
 func (s *Snapshot) UASubtree(root uint32) []uint32 {
 	seen := map[uint32]struct{}{root: {}}
 	q := []uint32{root}
+	const maxTraversalNodes = 100000 // Safety limit
 	for i := 0; i < len(q); i++ {
+		if len(seen) > maxTraversalNodes {
+			// Safety: stop traversal if limit exceeded
+			break
+		}
 		cur := q[i]
 		for _, child := range s.uaChildren[cur] {
 			if _, ok := seen[child]; ok {
@@ -213,7 +218,12 @@ func (s *Snapshot) UASubtree(root uint32) []uint32 {
 func (s *Snapshot) OASubtree(root uint32) []uint32 {
 	seen := map[uint32]struct{}{root: {}}
 	q := []uint32{root}
+	const maxTraversalNodes = 100000 // Safety limit
 	for i := 0; i < len(q); i++ {
+		if len(seen) > maxTraversalNodes {
+			// Safety: stop traversal if limit exceeded
+			break
+		}
 		cur := q[i]
 		for _, child := range s.oaChildren[cur] {
 			if _, ok := seen[child]; ok {

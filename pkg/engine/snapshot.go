@@ -52,7 +52,12 @@ func (s *Snapshot) UsersInUASubtree(root uint32) []uuid.UUID {
 	queue := []uint32{root}
 	seenUA[root] = struct{}{}
 
+	const maxTraversalNodes = 100000 // Safety limit
 	for i := 0; i < len(queue); i++ {
+		if len(seenUA) > maxTraversalNodes {
+			// Safety: stop traversal if limit exceeded
+			break
+		}
 		ua := queue[i]
 		for _, u := range s.uaDirectUsers[ua] {
 			seenUser[u] = struct{}{}
@@ -79,7 +84,12 @@ func (s *Snapshot) ObjectsInOASubtree(root uint32) []uuid.UUID {
 	queue := []uint32{root}
 	seenOA[root] = struct{}{}
 
+	const maxTraversalNodes = 100000 // Safety limit
 	for i := 0; i < len(queue); i++ {
+		if len(seenOA) > maxTraversalNodes {
+			// Safety: stop traversal if limit exceeded
+			break
+		}
 		oa := queue[i]
 		for _, o := range s.oaDirectObjects[oa] {
 			seenObj[o] = struct{}{}

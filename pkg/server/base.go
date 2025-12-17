@@ -4,7 +4,8 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/kumarabd/gokit/logger"
-	_ "github.com/kumarabd/policy-machine/docs" // Import docs for swagger
+
+	// _ "github.com/kumarabd/policy-machine/docs" // Import docs for swagger
 	"github.com/kumarabd/policy-machine/internal/metrics"
 	"github.com/kumarabd/policy-machine/pkg/engine"
 	httpSwagger "github.com/swaggo/http-swagger"

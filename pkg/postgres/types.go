@@ -127,6 +127,14 @@ type AssignmentEdge struct {
 // Attach composite unique index tags on the fields:
 func (AssignmentEdge) GormDBDataType(*gorm.DB, *schema.Field) string { return "" } // no-op; keep file gofmt-friendly
 
+// Methods for validate package interface
+func (e *AssignmentEdge) GetTenantID() uuid.UUID { return e.TenantID }
+func (e *AssignmentEdge) GetChildType() string   { return string(e.ChildType) }
+func (e *AssignmentEdge) GetChildID() uuid.UUID  { return e.ChildID }
+func (e *AssignmentEdge) GetParentType() string  { return string(e.ParentType) }
+func (e *AssignmentEdge) GetParentID() uuid.UUID { return e.ParentID }
+func (e *AssignmentEdge) SetTenantID(id uuid.UUID) { e.TenantID = id }
+
 // --- Associations ---
 // Association: UA <-> OA grants operations.
 // We normalize operations into a separate table for query efficiency and indexing.

@@ -13,8 +13,34 @@ import (
 	"github.com/kumarabd/policy-machine/pkg/postgres"
 )
 
+// CacheLimits defines maximum entries for each cache type.
+// Zero values use defaults:
+//   - UA/OA closure caches: 50,000 entries
+//   - Node closure caches: 200,000 entries
+//   - OA descendants: 200,000 entries
+//   - Allow/Deny caches: 10,000 users, 100,000 (user,op) entries
+//   - Decision cache: 500,000 entries
+type CacheLimits struct {
+	UAClosureMaxEntries     int // Max entries in user->UA closure cache (default: 50k)
+	OAClosureMaxEntries     int // Max entries in object->OA closure cache (default: 50k)
+	UANodeClosureMaxEntries int // Max entries in UA node closure cache (default: 200k)
+	OANodeClosureMaxEntries int // Max entries in OA node closure cache (default: 200k)
+	OADescClosureMaxEntries int // Max entries in OA descendants closure cache (default: 200k)
+
+	AllowCacheMaxUsers   int // Max number of user keys in allow cache (default: 10k)
+	AllowCacheMaxEntries int // Max total (user,op) pairs in allow cache (default: 100k)
+	DenyCacheMaxUsers    int // Max number of user keys in deny cache (default: 10k)
+	DenyCacheMaxEntries  int // Max total (user,op) pairs in deny cache (default: 100k)
+
+	DecisionCacheMaxEntries int // Max total decision keys (default: 500k)
+}
+
+// Config holds engine configuration
 type Config struct {
-	TenantID uuid.UUID
+	TenantID          uuid.UUID
+	MaxTraversalNodes int           // Maximum nodes to traverse in BFS operations (default: 100000)
+	CacheTTL          time.Duration // Default TTL for most caches (default: 2 minutes)
+	Limits            CacheLimits   // Cache capacity limits (zero = use defaults)
 }
 
 type Engine struct {
@@ -22,6 +48,8 @@ type Engine struct {
 	metric   *metrics.Handler
 	db       *postgres.Handler
 	tenantID uuid.UUID
+
+	maxTraversalNodes int // Maximum nodes to traverse in BFS operations
 
 	cur atomic.Pointer[Snapshot]
 
@@ -46,20 +74,65 @@ type Engine struct {
 }
 
 func New(log *logger.Handler, metric *metrics.Handler, db *postgres.Handler, cfg *Config, emitter ObligationEmitter) *Engine {
+	maxNodes := cfg.MaxTraversalNodes
+	if maxNodes <= 0 {
+		maxNodes = 100000 // Default: high limit to not break normal usage
+	}
+
+	// Set cache TTL defaults
+	cacheTTL := cfg.CacheTTL
+	if cacheTTL <= 0 {
+		cacheTTL = 2 * time.Minute // Default TTL
+	}
+
+	// Apply cache limits with defaults
+	limits := cfg.Limits
+	if limits.UAClosureMaxEntries <= 0 {
+		limits.UAClosureMaxEntries = 50000
+	}
+	if limits.OAClosureMaxEntries <= 0 {
+		limits.OAClosureMaxEntries = 50000
+	}
+	if limits.UANodeClosureMaxEntries <= 0 {
+		limits.UANodeClosureMaxEntries = 200000
+	}
+	if limits.OANodeClosureMaxEntries <= 0 {
+		limits.OANodeClosureMaxEntries = 200000
+	}
+	if limits.OADescClosureMaxEntries <= 0 {
+		limits.OADescClosureMaxEntries = 200000
+	}
+	if limits.AllowCacheMaxUsers <= 0 {
+		limits.AllowCacheMaxUsers = 10000
+	}
+	if limits.AllowCacheMaxEntries <= 0 {
+		limits.AllowCacheMaxEntries = 100000
+	}
+	if limits.DenyCacheMaxUsers <= 0 {
+		limits.DenyCacheMaxUsers = 10000
+	}
+	if limits.DenyCacheMaxEntries <= 0 {
+		limits.DenyCacheMaxEntries = 100000
+	}
+	if limits.DecisionCacheMaxEntries <= 0 {
+		limits.DecisionCacheMaxEntries = 500000
+	}
+
 	e := &Engine{
-		log:           log,
-		metric:        metric,
-		db:            db,
-		tenantID:      cfg.TenantID,
-		uaCache:       newClosureCache[uuid.UUID](2 * time.Minute),
-		oaCache:       newClosureCache[uuid.UUID](2 * time.Minute),
-		allowCache:    newUserOpBitmapCache(2 * time.Minute),
-		denyCache:     newUserOpBitmapCache(2 * time.Minute),
-		uaNodeClosure: newClosureCache[uint32](10 * time.Minute),
-		oaNodeClosure: newClosureCache[uint32](10 * time.Minute),
-		oaDescClosure: newClosureCache[uint32](10 * time.Minute),
-		decisions:     newIndexedDecisionCache(60 * time.Second),
-		emitter:       emitter,
+		log:               log,
+		metric:            metric,
+		db:                db,
+		tenantID:          cfg.TenantID,
+		maxTraversalNodes: maxNodes,
+		uaCache:           newClosureCache[uuid.UUID](cacheTTL, limits.UAClosureMaxEntries),
+		oaCache:           newClosureCache[uuid.UUID](cacheTTL, limits.OAClosureMaxEntries),
+		allowCache:        newUserOpBitmapCache(cacheTTL, limits.AllowCacheMaxUsers, limits.AllowCacheMaxEntries),
+		denyCache:         newUserOpBitmapCache(cacheTTL, limits.DenyCacheMaxUsers, limits.DenyCacheMaxEntries),
+		uaNodeClosure:     newClosureCache[uint32](10*time.Minute, limits.UANodeClosureMaxEntries),
+		oaNodeClosure:     newClosureCache[uint32](10*time.Minute, limits.OANodeClosureMaxEntries),
+		oaDescClosure:     newClosureCache[uint32](10*time.Minute, limits.OADescClosureMaxEntries),
+		decisions:         newIndexedDecisionCache(60*time.Second, limits.DecisionCacheMaxEntries),
+		emitter:           emitter,
 	}
 	return e
 }
@@ -182,6 +255,13 @@ func (e *Engine) Decide(ctx context.Context, userID, objectID uuid.UUID, op stri
 	uaClosure := e.userUAClosure(s, userID)
 	oaClosure := e.objectOAClosure(s, objectID)
 
+	// PC scope gate
+	pcs := commonPCs(s, uaClosure, oaClosure)
+	if pcs.IsEmpty() {
+		e.decisions.Put(userID, objectID, op, false, s.Version)
+		return false, nil
+	}
+
 	// Compute user and object policy classes
 	userPCs := roaring.New()
 	it := uaClosure.Iterator()
@@ -294,6 +374,10 @@ func (e *Engine) oaNodeDescendants(s *Snapshot, oa uint32) *roaring.Bitmap {
 	out.Add(oa)
 
 	for i := 0; i < len(queue); i++ {
+		if out.GetCardinality() > uint64(e.maxTraversalNodes) {
+			// Safety: deny access if traversal limit exceeded
+			return roaring.New() // Return empty bitmap (deny)
+		}
 		cur := queue[i]
 		for _, ch := range s.oaChildren[cur] {
 			if out.CheckedAdd(ch) {

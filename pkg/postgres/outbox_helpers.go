@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 
 	"github.com/google/uuid"
+	"github.com/kumarabd/policy-machine/pkg/postgres/validate"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
@@ -42,13 +43,35 @@ func AppendChange(tx *gorm.DB, tenantID uuid.UUID, revision int64, kind string, 
 	return tx.Create(&ch).Error
 }
 
-// Example: Create an assignment edge and emit delta.
+// AddAssignmentEdge creates an assignment edge with validation
 func AddAssignmentEdge(ctx context.Context, db *gorm.DB, tenantID uuid.UUID, edge AssignmentEdge) error {
 	return db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		// Validate before inserting
+		if err := validate.ValidateAssignmentEdgeCreate(ctx, tx, tenantID, &edge); err != nil {
+			return err
+		}
+
+		// Check if edge already exists (idempotent - validation returns nil if exists)
+		var existing AssignmentEdge
+		err := tx.WithContext(ctx).
+			Where("tenant_id = ? AND child_type = ? AND child_id = ? AND parent_type = ? AND parent_id = ?",
+				tenantID, edge.ChildType, edge.ChildID, edge.ParentType, edge.ParentID).
+			First(&existing).Error
+		if err == nil {
+			// Edge already exists - idempotent success, no need to create or emit change
+			return nil
+		}
+		if err != gorm.ErrRecordNotFound {
+			return err
+		}
+
+		// Set tenant ID and create edge
 		edge.TenantID = tenantID
 		if err := tx.Create(&edge).Error; err != nil {
 			return err
 		}
+
+		// Bump revision and append to change log
 		rev, err := BumpRevision(tx, tenantID)
 		if err != nil {
 			return err

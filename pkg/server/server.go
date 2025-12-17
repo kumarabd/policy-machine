@@ -7,7 +7,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/kumarabd/gokit/logger"
-	"github.com/kumarabd/policy-machine/docs"
+
+	// "github.com/kumarabd/policy-machine/docs"
 	"github.com/kumarabd/policy-machine/internal/metrics"
 	"github.com/kumarabd/policy-machine/pkg/engine"
 )
@@ -42,12 +43,6 @@ func New(l *logger.Handler, m *metrics.Handler, config *Config, eng *engine.Engi
 			Port: 8500, // Default port
 		}
 	}
-
-	// Update Swagger info with actual config values
-	docs.SwaggerInfo.Host = fmt.Sprintf("localhost:%d", config.Base.Port)
-	docs.SwaggerInfo.Title = fmt.Sprintf("%s API", formatTitle(config.Name))
-
-	l.Info().Msgf("Swagger UI will be available at: http://localhost:%d/swagger/index.html", config.Base.Port)
 
 	// Initiate Base Server object
 	httpObj := &BaseServer{

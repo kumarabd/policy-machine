@@ -1,6 +1,12 @@
 package engine
 
-import "github.com/RoaringBitmap/roaring"
+import (
+	"errors"
+
+	"github.com/RoaringBitmap/roaring"
+)
+
+var ErrTraversalLimitExceeded = errors.New("traversal limit exceeded: graph too large")
 
 // Returns closure of a UA node: itself + all ancestors via uaParents.
 func (e *Engine) uaNodeAllParents(s *Snapshot, ua uint32) *roaring.Bitmap {
@@ -13,6 +19,10 @@ func (e *Engine) uaNodeAllParents(s *Snapshot, ua uint32) *roaring.Bitmap {
 	out.Add(ua)
 
 	for i := 0; i < len(queue); i++ {
+		if out.GetCardinality() > uint64(e.maxTraversalNodes) {
+			// Safety: deny access if traversal limit exceeded
+			return roaring.New() // Return empty bitmap (deny)
+		}
 		cur := queue[i]
 		for _, p := range s.uaParents[cur] {
 			if out.CheckedAdd(p) {
@@ -35,6 +45,10 @@ func (e *Engine) oaNodeAllParents(s *Snapshot, oa uint32) *roaring.Bitmap {
 	out.Add(oa)
 
 	for i := 0; i < len(queue); i++ {
+		if out.GetCardinality() > uint64(e.maxTraversalNodes) {
+			// Safety: deny access if traversal limit exceeded
+			return roaring.New() // Return empty bitmap (deny)
+		}
 		cur := queue[i]
 		for _, p := range s.oaParents[cur] {
 			if out.CheckedAdd(p) {
