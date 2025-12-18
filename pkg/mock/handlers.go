@@ -1465,9 +1465,42 @@ func AuthorizeExplain(w http.ResponseWriter, r *http.Request) {
 }
 
 // GetGraphNeighborhood returns mock neighborhood
+// Supports both GET (query params) and POST (request body) for UI compatibility
 func GetGraphNeighborhood(w http.ResponseWriter, r *http.Request) {
-	nodeIDStr := r.URL.Query().Get("node_id")
-	nodeType := r.URL.Query().Get("node_type")
+	var nodeType, nodeIDStr string
+	var depth int = 1
+
+	// Handle POST request with JSON body (UI format)
+	if r.Method == "POST" {
+		var reqBody struct {
+			Seed struct {
+				Type string `json:"type"`
+				ID   string `json:"id"`
+			} `json:"seed"`
+			Depth int `json:"depth"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&reqBody); err == nil {
+			nodeType = reqBody.Seed.Type
+			nodeIDStr = reqBody.Seed.ID
+			if reqBody.Depth > 0 {
+				depth = reqBody.Depth
+			}
+		}
+	}
+
+	// Fallback to GET query parameters if POST body parsing failed or it's a GET request
+	if nodeIDStr == "" {
+		nodeIDStr = r.URL.Query().Get("node_id")
+		nodeType = r.URL.Query().Get("node_type")
+		if depthStr := r.URL.Query().Get("depth"); depthStr != "" {
+			if d, err := strconv.Atoi(depthStr); err == nil && d > 0 {
+				depth = d
+			}
+		}
+	}
+
+	// depth is reserved for future implementation of neighborhood depth traversal
+	_ = depth
 
 	if nodeIDStr == "" {
 		respondError(w, http.StatusBadRequest, "VALIDATION_ERROR", "node_id is required")
@@ -1481,11 +1514,13 @@ func GetGraphNeighborhood(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Return the node itself and empty edges
+	// TODO: Build actual neighborhood graph from mock data
 	response := api.GraphNeighborhoodResponse{
 		Nodes: []api.GraphNode{
 			{
 				ID:   nodeID,
 				Type: nodeType,
+				Name: "Node " + nodeID.String()[:8], // Placeholder name
 			},
 		},
 		Edges: []api.GraphEdge{},

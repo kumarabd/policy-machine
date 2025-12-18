@@ -44,6 +44,7 @@ func (h *BaseServer) GetGraphSummary(w http.ResponseWriter, r *http.Request) {
 }
 
 // GetGraphNeighborhood returns nodes and edges around a given node
+// Supports both GET (query params) and POST (request body) for UI compatibility
 func (h *BaseServer) GetGraphNeighborhood(w http.ResponseWriter, r *http.Request) {
 	if IsMockMode(r.Context()) {
 		mock.GetGraphNeighborhood(w, r)
@@ -56,14 +57,40 @@ func (h *BaseServer) GetGraphNeighborhood(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	nodeType := r.URL.Query().Get("node_type")
-	nodeIDStr := r.URL.Query().Get("node_id")
-	_ = 1 // depth (for future implementation)
-	if depthStr := r.URL.Query().Get("depth"); depthStr != "" {
-		if _, err := strconv.Atoi(depthStr); err == nil {
-			// depth = d (for future use)
+	var nodeType, nodeIDStr string
+	var depth int = 1
+
+	// Handle POST request with JSON body (UI format)
+	if r.Method == "POST" {
+		var reqBody struct {
+			Seed struct {
+				Type string `json:"type"`
+				ID   string `json:"id"`
+			} `json:"seed"`
+			Depth int `json:"depth"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&reqBody); err == nil {
+			nodeType = reqBody.Seed.Type
+			nodeIDStr = reqBody.Seed.ID
+			if reqBody.Depth > 0 {
+				depth = reqBody.Depth
+			}
 		}
 	}
+
+	// Fallback to GET query parameters if POST body parsing failed or it's a GET request
+	if nodeIDStr == "" {
+		nodeType = r.URL.Query().Get("node_type")
+		nodeIDStr = r.URL.Query().Get("node_id")
+		if depthStr := r.URL.Query().Get("depth"); depthStr != "" {
+			if d, err := strconv.Atoi(depthStr); err == nil && d > 0 {
+				depth = d
+			}
+		}
+	}
+
+	// depth is reserved for future implementation of neighborhood depth traversal
+	_ = depth
 
 	if nodeIDStr == "" {
 		respondError(w, http.StatusBadRequest, "VALIDATION_ERROR", "node_id is required")

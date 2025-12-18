@@ -160,6 +160,7 @@ func (h *BaseServer) RegisterRoutes(defaultTenantID uuid.UUID) {
 		r.Route("/graph", func(r chi.Router) {
 			r.Get("/summary", h.GetGraphSummary)
 			r.Get("/neighborhood", h.GetGraphNeighborhood)
+			r.Post("/neighborhood", h.GetGraphNeighborhood) // Support POST for UI compatibility
 			r.Get("/search", h.GraphSearch)
 		})
 
@@ -255,6 +256,7 @@ func (h *BaseServer) RegisterRoutes(defaultTenantID uuid.UUID) {
 		r.Route("/graph", func(r chi.Router) {
 			r.Get("/summary", h.GetGraphSummary)
 			r.Get("/neighborhood", h.GetGraphNeighborhood)
+			r.Post("/neighborhood", h.GetGraphNeighborhood) // Support POST for UI compatibility
 			r.Get("/search", h.GraphSearch)
 		})
 
