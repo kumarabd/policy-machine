@@ -10,38 +10,17 @@ import (
 	"github.com/google/uuid"
 	"github.com/kumarabd/gokit/logger"
 	"github.com/kumarabd/policy-machine/internal/metrics"
+	"github.com/kumarabd/policy-machine/pkg/cache"
 	"github.com/kumarabd/policy-machine/pkg/postgres"
 )
 
-// CacheLimits defines maximum entries for each cache type.
-// Zero values use defaults:
-//   - UA/OA closure caches: 50,000 entries
-//   - Node closure caches: 200,000 entries
-//   - OA descendants: 200,000 entries
-//   - Allow/Deny caches: 10,000 users, 100,000 (user,op) entries
-//   - Decision cache: 500,000 entries
-type CacheLimits struct {
-	UAClosureMaxEntries     int // Max entries in user->UA closure cache (default: 50k)
-	OAClosureMaxEntries     int // Max entries in object->OA closure cache (default: 50k)
-	UANodeClosureMaxEntries int // Max entries in UA node closure cache (default: 200k)
-	OANodeClosureMaxEntries int // Max entries in OA node closure cache (default: 200k)
-	OADescClosureMaxEntries int // Max entries in OA descendants closure cache (default: 200k)
-
-	AllowCacheMaxUsers   int // Max number of user keys in allow cache (default: 10k)
-	AllowCacheMaxEntries int // Max total (user,op) pairs in allow cache (default: 100k)
-	DenyCacheMaxUsers    int // Max number of user keys in deny cache (default: 10k)
-	DenyCacheMaxEntries  int // Max total (user,op) pairs in deny cache (default: 100k)
-
-	DecisionCacheMaxEntries int // Max total decision keys (default: 500k)
-}
-
 // Config holds engine configuration
 type Config struct {
-	TenantID          uuid.UUID     `yaml:"tenant_id" json:"tenant_id"`
-	MaxTraversalNodes int           `yaml:"max_traversal_nodes" json:"max_traversal_nodes"` // Maximum nodes to traverse in BFS operations (default: 100000)
-	CacheTTL          time.Duration `yaml:"cache_ttl" json:"cache_ttl"`                     // Default TTL for most caches (default: 2 minutes)
-	Limits            CacheLimits   `yaml:"limits" json:"limits"`                           // Cache capacity limits (zero = use defaults)
-	MockMode          bool          `yaml:"mock_mode" json:"mock_mode"`                     // Enable mock mode for API responses
+	TenantID          uuid.UUID          `yaml:"tenant_id" json:"tenant_id"`
+	MaxTraversalNodes int                `yaml:"max_traversal_nodes" json:"max_traversal_nodes"` // Maximum nodes to traverse in BFS operations (default: 100000)
+	CacheTTL          time.Duration      `yaml:"cache_ttl" json:"cache_ttl"`                     // Default TTL for most caches (default: 2 minutes)
+	Limits            cache.CacheLimits `yaml:"limits" json:"limits"`                           // Cache capacity limits (zero = use defaults)
+	MockMode          bool               `yaml:"mock_mode" json:"mock_mode"`                     // Enable mock mode for API responses
 }
 
 type Engine struct {
@@ -54,19 +33,8 @@ type Engine struct {
 
 	cur atomic.Pointer[Snapshot]
 
-	// Closure caches (TTL-based). Keep separate for UA/OA.
-	uaCache closureCache[uuid.UUID]
-	oaCache closureCache[uuid.UUID]
-
-	// UserOP caches (TTL-based).
-	allowCache *userOpBitmapCache
-	denyCache  *userOpBitmapCache
-
-	uaNodeClosure closureCache[uint32] // uaIdx -> bitmap of reachable UAs (including itself)
-	oaNodeClosure closureCache[uint32] // oaIdx -> bitmap of reachable OAs (including itself)
-	oaDescClosure closureCache[uint32] // oaIdx -> bitmap(descendants + self)
-
-	decisions *indexedDecisionCache
+	// Caches - injected via dependency injection
+	caches *cache.Caches
 
 	// To lock in the refresh operation
 	refreshMu sync.Mutex
@@ -74,7 +42,9 @@ type Engine struct {
 	emitter ObligationEmitter
 }
 
-func New(log *logger.Handler, metric *metrics.Handler, db *postgres.Handler, cfg *Config, emitter ObligationEmitter) *Engine {
+// New creates a new engine instance with caches created via dependency injection
+// If caches is nil, default caches will be created based on config
+func New(log *logger.Handler, metric *metrics.Handler, db *postgres.Handler, cfg *Config, emitter ObligationEmitter, caches *cache.Caches) *Engine {
 	maxNodes := cfg.MaxTraversalNodes
 	if maxNodes <= 0 {
 		maxNodes = 100000 // Default: high limit to not break normal usage
@@ -86,37 +56,9 @@ func New(log *logger.Handler, metric *metrics.Handler, db *postgres.Handler, cfg
 		cacheTTL = 2 * time.Minute // Default TTL
 	}
 
-	// Apply cache limits with defaults
-	limits := cfg.Limits
-	if limits.UAClosureMaxEntries <= 0 {
-		limits.UAClosureMaxEntries = 50000
-	}
-	if limits.OAClosureMaxEntries <= 0 {
-		limits.OAClosureMaxEntries = 50000
-	}
-	if limits.UANodeClosureMaxEntries <= 0 {
-		limits.UANodeClosureMaxEntries = 200000
-	}
-	if limits.OANodeClosureMaxEntries <= 0 {
-		limits.OANodeClosureMaxEntries = 200000
-	}
-	if limits.OADescClosureMaxEntries <= 0 {
-		limits.OADescClosureMaxEntries = 200000
-	}
-	if limits.AllowCacheMaxUsers <= 0 {
-		limits.AllowCacheMaxUsers = 10000
-	}
-	if limits.AllowCacheMaxEntries <= 0 {
-		limits.AllowCacheMaxEntries = 100000
-	}
-	if limits.DenyCacheMaxUsers <= 0 {
-		limits.DenyCacheMaxUsers = 10000
-	}
-	if limits.DenyCacheMaxEntries <= 0 {
-		limits.DenyCacheMaxEntries = 100000
-	}
-	if limits.DecisionCacheMaxEntries <= 0 {
-		limits.DecisionCacheMaxEntries = 500000
+	// Create caches if not provided (dependency injection)
+	if caches == nil {
+		caches = cache.NewCaches(cacheTTL, cfg.Limits)
 	}
 
 	e := &Engine{
@@ -125,14 +67,7 @@ func New(log *logger.Handler, metric *metrics.Handler, db *postgres.Handler, cfg
 		db:                db,
 		tenantID:          cfg.TenantID,
 		maxTraversalNodes: maxNodes,
-		uaCache:           newClosureCache[uuid.UUID](cacheTTL, limits.UAClosureMaxEntries),
-		oaCache:           newClosureCache[uuid.UUID](cacheTTL, limits.OAClosureMaxEntries),
-		allowCache:        newUserOpBitmapCache(cacheTTL, limits.AllowCacheMaxUsers, limits.AllowCacheMaxEntries),
-		denyCache:         newUserOpBitmapCache(cacheTTL, limits.DenyCacheMaxUsers, limits.DenyCacheMaxEntries),
-		uaNodeClosure:     newClosureCache[uint32](10*time.Minute, limits.UANodeClosureMaxEntries),
-		oaNodeClosure:     newClosureCache[uint32](10*time.Minute, limits.OANodeClosureMaxEntries),
-		oaDescClosure:     newClosureCache[uint32](10*time.Minute, limits.OADescClosureMaxEntries),
-		decisions:         newIndexedDecisionCache(60*time.Second, limits.DecisionCacheMaxEntries),
+		caches:            caches,
 		emitter:           emitter,
 	}
 	return e
@@ -170,13 +105,13 @@ func (e *Engine) Refresh(ctx context.Context) error {
 	e.cur.Store(snap)
 
 	// Invalidate caches on policy change (simple + safe).
-	e.uaCache.Clear()
-	e.oaCache.Clear()
-	e.allowCache.Clear()
-	e.denyCache.Clear()
-	e.uaNodeClosure.Clear()
-	e.oaNodeClosure.Clear()
-	e.decisions.Clear()
+	e.caches.UACache.Clear()
+	e.caches.OACache.Clear()
+	e.caches.AllowCache.Clear()
+	e.caches.DenyCache.Clear()
+	e.caches.UANodeClosure.Clear()
+	e.caches.OANodeClosure.Clear()
+	e.caches.Decisions.Clear()
 	return nil
 }
 
@@ -192,7 +127,7 @@ func (e *Engine) AllowedFor(s *Snapshot, user uuid.UUID, op string, uaClosure *r
 }
 
 func (e *Engine) allowedFor(s *Snapshot, user uuid.UUID, op string, uaClosure *roaring.Bitmap) *roaring.Bitmap {
-	if b, ok := e.allowCache.Get(user, op); ok {
+	if b, ok := e.caches.AllowCache.Get(user, op); ok {
 		return b
 	}
 	allowed := roaring.New()
@@ -208,8 +143,8 @@ func (e *Engine) allowedFor(s *Snapshot, user uuid.UUID, op string, uaClosure *r
 			}
 		}
 	}
-	// Store immutable bitmap (don’t mutate later)
-	e.allowCache.Put(user, op, allowed)
+	// Store immutable bitmap (don't mutate later)
+	e.caches.AllowCache.Put(user, op, allowed)
 	return allowed
 }
 
@@ -219,7 +154,7 @@ func (e *Engine) DeniedFor(s *Snapshot, user uuid.UUID, op string, uaClosure *ro
 }
 
 func (e *Engine) deniedFor(s *Snapshot, user uuid.UUID, op string, uaClosure *roaring.Bitmap) *roaring.Bitmap {
-	if b, ok := e.denyCache.Get(user, op); ok {
+	if b, ok := e.caches.DenyCache.Get(user, op); ok {
 		return b
 	}
 
@@ -255,7 +190,7 @@ func (e *Engine) deniedFor(s *Snapshot, user uuid.UUID, op string, uaClosure *ro
 		}
 	}
 
-	e.denyCache.Put(user, op, denied)
+	e.caches.DenyCache.Put(user, op, denied)
 	return denied
 }
 
@@ -269,7 +204,7 @@ func (e *Engine) Decide(ctx context.Context, userID, objectID uuid.UUID, op stri
 	}
 
 	// Decision cache hit?
-	if allowed, ok := e.decisions.Get(userID, objectID, op, s.Version); ok {
+	if allowed, ok := e.caches.Decisions.Get(userID, objectID, op, s.Version); ok {
 		return allowed, nil
 	}
 
@@ -279,7 +214,7 @@ func (e *Engine) Decide(ctx context.Context, userID, objectID uuid.UUID, op stri
 	// PC scope gate
 	pcs := commonPCs(s, uaClosure, oaClosure)
 	if pcs.IsEmpty() {
-		e.decisions.Put(userID, objectID, op, false, s.Version)
+		e.caches.Decisions.Put(userID, objectID, op, false, s.Version)
 		return false, nil
 	}
 
@@ -305,7 +240,7 @@ func (e *Engine) Decide(ctx context.Context, userID, objectID uuid.UUID, op stri
 	userPCs.And(objPCs)
 	if userPCs.IsEmpty() {
 		// No shared policy class => deny (and cache it)
-		e.decisions.Put(userID, objectID, op, false, s.Version)
+		e.caches.Decisions.Put(userID, objectID, op, false, s.Version)
 		return false, nil
 	}
 
@@ -319,32 +254,32 @@ func (e *Engine) Decide(ctx context.Context, userID, objectID uuid.UUID, op stri
 
 	allowed := !effective.IsEmpty()
 
-	e.decisions.Put(userID, objectID, op, allowed, s.Version)
+	e.caches.Decisions.Put(userID, objectID, op, allowed, s.Version)
 	return allowed, nil
 }
 
 func (e *Engine) applyInvalidations(inv *invalidation) {
 	// 1) Invalidate node-level closure caches first (UA/OA)
 	for uaIdx := range inv.uaNodeClosures {
-		e.uaNodeClosure.Delete(uaIdx)
+		e.caches.UANodeClosure.Delete(uaIdx)
 	}
 	for oaIdx := range inv.oaNodeClosures {
-		e.oaNodeClosure.Delete(oaIdx)
+		e.caches.OANodeClosure.Delete(oaIdx)
 	}
 
 	// 2) UA closure changes => user UA-closure + any derived caches become stale
 	// (allow/deny/decisions depend on UA closure)
 	for u := range inv.usersUAClosure {
-		e.uaCache.Delete(u)
-		e.allowCache.DeleteUser(u)
-		e.denyCache.DeleteUser(u)
-		e.decisions.DeleteUser(u)
+		e.caches.UACache.Delete(u)
+		e.caches.AllowCache.DeleteUser(u)
+		e.caches.DenyCache.DeleteUser(u)
+		e.caches.Decisions.DeleteUser(u)
 	}
 
 	// 3) OA closure changes => object OA-closure + any decisions involving that object become stale
 	for o := range inv.objectsOAClosure {
-		e.oaCache.Delete(o)
-		e.decisions.DeleteObject(o)
+		e.caches.OACache.Delete(o)
+		e.caches.Decisions.DeleteObject(o)
 	}
 
 	// 4) Dedup ops across allow/deny invalidations (avoid double DeleteUserOp calls)
@@ -372,21 +307,21 @@ func (e *Engine) applyInvalidations(inv *invalidation) {
 	for u, ops := range opsByUser {
 		for op := range ops {
 			// Safe to call even if not present
-			e.allowCache.DeleteUserOp(u, op)
-			e.denyCache.DeleteUserOp(u, op)
-			e.decisions.DeleteUserOp(u, op)
+			e.caches.AllowCache.DeleteUserOp(u, op)
+			e.caches.DenyCache.DeleteUserOp(u, op)
+			e.caches.Decisions.DeleteUserOp(u, op)
 		}
 	}
 	for u := range inv.usersDecisionsOnly {
-		e.decisions.DeleteUser(u)
+		e.caches.Decisions.DeleteUser(u)
 	}
 	for o := range inv.objectsDecisionsOnly {
-		e.decisions.DeleteObject(o)
+		e.caches.Decisions.DeleteObject(o)
 	}
 }
 
 func (e *Engine) oaNodeDescendants(s *Snapshot, oa uint32) *roaring.Bitmap {
-	if b, ok := e.oaDescClosure.Get(oa); ok {
+	if b, ok := e.caches.OADescClosure.Get(oa); ok {
 		return b
 	}
 
@@ -407,6 +342,6 @@ func (e *Engine) oaNodeDescendants(s *Snapshot, oa uint32) *roaring.Bitmap {
 		}
 	}
 
-	e.oaDescClosure.Put(oa, out)
+	e.caches.OADescClosure.Put(oa, out)
 	return out
 }

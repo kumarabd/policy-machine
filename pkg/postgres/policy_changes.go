@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 
 	"github.com/google/uuid"
-	"github.com/kumarabd/policy-machine/pkg/postgres/validate"
+	"github.com/kumarabd/policy-machine/pkg/validate"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
@@ -85,3 +85,4 @@ func AddAssignmentEdge(ctx context.Context, db *gorm.DB, tenantID uuid.UUID, edg
 		return AppendChange(tx, tenantID, rev, "ASSIGNMENT_EDGE", OpAdd, payload)
 	})
 }
+

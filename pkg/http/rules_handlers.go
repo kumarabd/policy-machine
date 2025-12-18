@@ -1,4 +1,4 @@
-package server
+package http
 
 import (
 	"encoding/json"
@@ -14,7 +14,7 @@ import (
 )
 
 // ListRules returns paginated list of rules (associations)
-func (h *BaseServer) ListRules(w http.ResponseWriter, r *http.Request) {
+func (s *HTTP) ListRules(w http.ResponseWriter, r *http.Request) {
 	if IsMockMode(r.Context()) {
 		mock.ListRules(w, r)
 		return
@@ -46,7 +46,7 @@ func (h *BaseServer) ListRules(w http.ResponseWriter, r *http.Request) {
 	}
 	cursor := r.URL.Query().Get("cursor")
 
-	_, results, nextCursor, hasMore, err := h.engine.GetDB().ListRules(r.Context(), tenantID, filters, limit, cursor)
+	_, results, nextCursor, hasMore, err := s.engine.GetDB().ListRules(r.Context(), tenantID, filters, limit, cursor)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return
@@ -57,13 +57,13 @@ func (h *BaseServer) ListRules(w http.ResponseWriter, r *http.Request) {
 		ops, _ := res["operations"].([]string)
 		uaID := res["ua_id"].(uuid.UUID)
 		oaID := res["oa_id"].(uuid.UUID)
-		
+
 		// Generate a name from the scopes if not available
 		name := "Rule"
 		if desc, ok := res["description"].(string); ok && desc != "" {
 			name = desc
 		}
-		
+
 		rules[i] = api.Rule{
 			ID:          res["id"].(uuid.UUID),
 			Name:        name,
@@ -90,7 +90,7 @@ func (h *BaseServer) ListRules(w http.ResponseWriter, r *http.Request) {
 		nextCursorPtr = &nextCursor
 	}
 	total := len(rules)
-	
+
 	response := api.SearchResponse[api.Rule]{
 		Items:      rules,
 		NextCursor: nextCursorPtr,
@@ -102,7 +102,7 @@ func (h *BaseServer) ListRules(w http.ResponseWriter, r *http.Request) {
 }
 
 // CreateRule creates a new rule (association)
-func (h *BaseServer) CreateRule(w http.ResponseWriter, r *http.Request) {
+func (s *HTTP) CreateRule(w http.ResponseWriter, r *http.Request) {
 	if IsMockMode(r.Context()) {
 		mock.CreateRule(w, r)
 		return
@@ -133,7 +133,7 @@ func (h *BaseServer) CreateRule(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	assocID, revision, err := h.engine.GetDB().CreateRule(r.Context(), tenantID, req.SubjectSelector.ID, req.ObjectSelector.ID, req.Actions)
+	assocID, revision, err := s.engine.GetDB().CreateRule(r.Context(), tenantID, req.SubjectSelector.ID, req.ObjectSelector.ID, req.Actions)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return
@@ -142,18 +142,18 @@ func (h *BaseServer) CreateRule(w http.ResponseWriter, r *http.Request) {
 	now := time.Now()
 	response := api.RuleResponse{
 		Rule: api.Rule{
-			ID:          assocID,
-			Name:        req.Name,
-			Description: req.Description,
-			ScopeID:     req.ScopeID,
-			Actions:     req.Actions,
+			ID:              assocID,
+			Name:            req.Name,
+			Description:     req.Description,
+			ScopeID:         req.ScopeID,
+			Actions:         req.Actions,
 			SubjectSelector: req.SubjectSelector,
 			ObjectSelector:  req.ObjectSelector,
-			Condition:    req.Condition,
-			Effect:       req.Effect,
-			Priority:     req.Priority,
-			Enabled:      req.Enabled,
-			CreatedAt:    now,
+			Condition:       req.Condition,
+			Effect:          req.Effect,
+			Priority:        req.Priority,
+			Enabled:         req.Enabled,
+			CreatedAt:       now,
 		},
 		Revision: revision,
 	}
@@ -164,7 +164,7 @@ func (h *BaseServer) CreateRule(w http.ResponseWriter, r *http.Request) {
 }
 
 // GetRule returns a rule by ID
-func (h *BaseServer) GetRule(w http.ResponseWriter, r *http.Request) {
+func (s *HTTP) GetRule(w http.ResponseWriter, r *http.Request) {
 	if IsMockMode(r.Context()) {
 		mock.GetRule(w, r)
 		return
@@ -183,7 +183,7 @@ func (h *BaseServer) GetRule(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	assoc, ops, err := h.engine.GetDB().GetRule(r.Context(), tenantID, id)
+	assoc, ops, err := s.engine.GetDB().GetRule(r.Context(), tenantID, id)
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
 			respondError(w, http.StatusNotFound, "NOT_FOUND", "Rule not found")
@@ -216,7 +216,7 @@ func (h *BaseServer) GetRule(w http.ResponseWriter, r *http.Request) {
 }
 
 // UpdateRule updates a rule
-func (h *BaseServer) UpdateRule(w http.ResponseWriter, r *http.Request) {
+func (s *HTTP) UpdateRule(w http.ResponseWriter, r *http.Request) {
 	if IsMockMode(r.Context()) {
 		mock.UpdateRule(w, r)
 		return
@@ -244,11 +244,11 @@ func (h *BaseServer) UpdateRule(w http.ResponseWriter, r *http.Request) {
 	ops := req.Actions
 	if len(ops) == 0 {
 		// Get existing operations if not provided
-		_, existingOps, _ := h.engine.GetDB().GetRule(r.Context(), tenantID, id)
+		_, existingOps, _ := s.engine.GetDB().GetRule(r.Context(), tenantID, id)
 		ops = existingOps
 	}
 
-	revision, err := h.engine.GetDB().UpdateRule(r.Context(), tenantID, id, ops)
+	revision, err := s.engine.GetDB().UpdateRule(r.Context(), tenantID, id, ops)
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
 			respondError(w, http.StatusNotFound, "NOT_FOUND", "Rule not found")
@@ -258,7 +258,7 @@ func (h *BaseServer) UpdateRule(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	assoc, ops, _ := h.engine.GetDB().GetRule(r.Context(), tenantID, id)
+	assoc, ops, _ := s.engine.GetDB().GetRule(r.Context(), tenantID, id)
 	now := time.Now()
 
 	response := api.RuleResponse{
@@ -288,7 +288,7 @@ func (h *BaseServer) UpdateRule(w http.ResponseWriter, r *http.Request) {
 }
 
 // DeleteRule deletes a rule
-func (h *BaseServer) DeleteRule(w http.ResponseWriter, r *http.Request) {
+func (s *HTTP) DeleteRule(w http.ResponseWriter, r *http.Request) {
 	if IsMockMode(r.Context()) {
 		mock.DeleteRule(w, r)
 		return
@@ -307,7 +307,7 @@ func (h *BaseServer) DeleteRule(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, err = h.engine.GetDB().DeleteRule(r.Context(), tenantID, id)
+	_, err = s.engine.GetDB().DeleteRule(r.Context(), tenantID, id)
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
 			respondError(w, http.StatusNotFound, "NOT_FOUND", "Rule not found")
@@ -319,4 +319,3 @@ func (h *BaseServer) DeleteRule(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusNoContent)
 }
-

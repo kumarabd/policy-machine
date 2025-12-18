@@ -1,4 +1,4 @@
-package engine
+package cache
 
 import (
 	"container/list"
@@ -23,8 +23,8 @@ type decisionEntry struct {
 
 type keySet map[decisionKey]struct{}
 
-// indexedDecisionCache is a bounded decision cache with LRU eviction and secondary indexes
-type indexedDecisionCache struct {
+// IndexedDecisionCache is a bounded decision cache with LRU eviction and secondary indexes
+type IndexedDecisionCache struct {
 	ttl        time.Duration
 	maxEntries int
 
@@ -43,11 +43,12 @@ type indexedDecisionCache struct {
 	expiredDeletes atomic.Uint64
 }
 
-func newIndexedDecisionCache(ttl time.Duration, maxEntries int) *indexedDecisionCache {
+// NewIndexedDecisionCache creates a new indexed decision cache
+func NewIndexedDecisionCache(ttl time.Duration, maxEntries int) *IndexedDecisionCache {
 	if maxEntries <= 0 {
 		maxEntries = 500000 // Default
 	}
-	return &indexedDecisionCache{
+	return &IndexedDecisionCache{
 		ttl:        ttl,
 		maxEntries: maxEntries,
 		entries:    make(map[decisionKey]decisionEntry),
@@ -60,13 +61,13 @@ func newIndexedDecisionCache(ttl time.Duration, maxEntries int) *indexedDecision
 }
 
 // Len returns the current number of entries in the cache
-func (c *indexedDecisionCache) Len() int {
+func (c *IndexedDecisionCache) Len() int {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	return len(c.entries)
 }
 
-func (c *indexedDecisionCache) Get(user, object uuid.UUID, op string, curRevision int64) (bool, bool) {
+func (c *IndexedDecisionCache) Get(user, object uuid.UUID, op string, curRevision int64) (bool, bool) {
 	k := decisionKey{User: user, Object: object, Op: op}
 	now := time.Now()
 
@@ -97,7 +98,7 @@ func (c *indexedDecisionCache) Get(user, object uuid.UUID, op string, curRevisio
 	return e.Allowed, true
 }
 
-func (c *indexedDecisionCache) Put(user, object uuid.UUID, op string, allowed bool, curRevision int64) {
+func (c *IndexedDecisionCache) Put(user, object uuid.UUID, op string, allowed bool, curRevision int64) {
 	k := decisionKey{User: user, Object: object, Op: op}
 	e := decisionEntry{
 		Allowed:  allowed,
@@ -160,14 +161,14 @@ func (c *indexedDecisionCache) Put(user, object uuid.UUID, op string, allowed bo
 	c.byUserOp[user][op][k] = struct{}{}
 }
 
-func (c *indexedDecisionCache) Delete(user, object uuid.UUID, op string) {
+func (c *IndexedDecisionCache) Delete(user, object uuid.UUID, op string) {
 	k := decisionKey{User: user, Object: object, Op: op}
 	c.mu.Lock()
 	c.deleteKeyLocked(k)
 	c.mu.Unlock()
 }
 
-func (c *indexedDecisionCache) DeleteUser(user uuid.UUID) {
+func (c *IndexedDecisionCache) DeleteUser(user uuid.UUID) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -181,7 +182,7 @@ func (c *indexedDecisionCache) DeleteUser(user uuid.UUID) {
 	// deleteKeyLocked will also remove c.byUser[user] when empty
 }
 
-func (c *indexedDecisionCache) DeleteObject(object uuid.UUID) {
+func (c *IndexedDecisionCache) DeleteObject(object uuid.UUID) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -195,7 +196,7 @@ func (c *indexedDecisionCache) DeleteObject(object uuid.UUID) {
 	// deleteKeyLocked will also remove c.byObject[object] when empty
 }
 
-func (c *indexedDecisionCache) DeleteUserOp(user uuid.UUID, op string) {
+func (c *IndexedDecisionCache) DeleteUserOp(user uuid.UUID, op string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -213,7 +214,7 @@ func (c *indexedDecisionCache) DeleteUserOp(user uuid.UUID, op string) {
 	// deleteKeyLocked will clean up empty maps
 }
 
-func (c *indexedDecisionCache) Clear() {
+func (c *IndexedDecisionCache) Clear() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -227,7 +228,7 @@ func (c *indexedDecisionCache) Clear() {
 
 // cleanupExpiredLocked removes up to maxExpired expired entries from the back
 // Must be called with lock held
-func (c *indexedDecisionCache) cleanupExpiredLocked(maxExpired int) {
+func (c *IndexedDecisionCache) cleanupExpiredLocked(maxExpired int) {
 	now := time.Now()
 	removed := 0
 	for removed < maxExpired {
@@ -249,7 +250,7 @@ func (c *indexedDecisionCache) cleanupExpiredLocked(maxExpired int) {
 
 // --- internal helpers (must be called under write lock) ---
 
-func (c *indexedDecisionCache) deleteKeyLocked(k decisionKey) {
+func (c *IndexedDecisionCache) deleteKeyLocked(k decisionKey) {
 	// If not present, nothing to do.
 	if _, ok := c.entries[k]; !ok {
 		return
@@ -293,11 +294,12 @@ func (c *indexedDecisionCache) deleteKeyLocked(k decisionKey) {
 }
 
 // Evictions returns the number of evictions that have occurred
-func (c *indexedDecisionCache) Evictions() uint64 {
+func (c *IndexedDecisionCache) Evictions() uint64 {
 	return c.evictions.Load()
 }
 
 // ExpiredDeletes returns the number of expired entries deleted
-func (c *indexedDecisionCache) ExpiredDeletes() uint64 {
+func (c *IndexedDecisionCache) ExpiredDeletes() uint64 {
 	return c.expiredDeletes.Load()
 }
+

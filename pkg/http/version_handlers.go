@@ -1,4 +1,4 @@
-package server
+package http
 
 import (
 	"encoding/json"
@@ -18,7 +18,7 @@ import (
 // @Param id path string true "Version ID"
 // @Success 200 {object} VersionDiff
 // @Router /api/v1/versions/{id}/diff [get]
-func (h *BaseServer) GetVersionDiff(w http.ResponseWriter, r *http.Request) {
+func (s *HTTP) GetVersionDiff(w http.ResponseWriter, r *http.Request) {
 	if IsMockMode(r.Context()) {
 		mock.GetVersionDiff(w, r)
 		return
@@ -38,7 +38,7 @@ func (h *BaseServer) GetVersionDiff(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get policy changes for this version
-	changes, err := h.engine.GetDB().GetPolicyChanges(r.Context(), tenantID, 0, 10000)
+	changes, err := s.engine.GetDB().GetPolicyChanges(r.Context(), tenantID, 0, 10000)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return
@@ -57,7 +57,7 @@ func (h *BaseServer) GetVersionDiff(w http.ResponseWriter, r *http.Request) {
 			} else {
 				payload = make(map[string]interface{})
 			}
-			
+
 			// Convert postgres.PolicyChange to api.PolicyChangeItem
 			versionChanges = append(versionChanges, api.PolicyChangeItem{
 				Seq:       ch.Seq,
@@ -91,7 +91,7 @@ func (h *BaseServer) GetVersionDiff(w http.ResponseWriter, r *http.Request) {
 // @Param id path string true "Version ID"
 // @Success 200 {object} PolicySnapshot
 // @Router /api/v1/versions/{id}/snapshot [get]
-func (h *BaseServer) GetVersionSnapshot(w http.ResponseWriter, r *http.Request) {
+func (s *HTTP) GetVersionSnapshot(w http.ResponseWriter, r *http.Request) {
 	if IsMockMode(r.Context()) {
 		mock.GetVersionSnapshot(w, r)
 		return
@@ -124,4 +124,3 @@ func (h *BaseServer) GetVersionSnapshot(w http.ResponseWriter, r *http.Request) 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response)
 }
-

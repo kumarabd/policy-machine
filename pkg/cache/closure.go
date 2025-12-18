@@ -1,4 +1,4 @@
-package engine
+package cache
 
 import (
 	"container/list"
@@ -19,8 +19,8 @@ type lruElement[K comparable] struct {
 	entry cacheEntry
 }
 
-// closureCache is a bounded TTL cache with LRU eviction
-type closureCache[K comparable] struct {
+// ClosureCache is a bounded TTL cache with LRU eviction
+type ClosureCache[K comparable] struct {
 	ttl        time.Duration
 	maxEntries int
 	mu         sync.Mutex // Single lock for simplicity
@@ -31,12 +31,13 @@ type closureCache[K comparable] struct {
 	expiredDeletes atomic.Uint64 // Counter for expired entry deletions
 }
 
-func newClosureCache[K comparable](ttl time.Duration, maxEntries int) closureCache[K] {
+// NewClosureCache creates a new closure cache with the specified TTL and max entries
+func NewClosureCache[K comparable](ttl time.Duration, maxEntries int) *ClosureCache[K] {
 	if maxEntries <= 0 {
 		// Default: 50k for UA/OA closures, 200k for node closures
 		maxEntries = 50000
 	}
-	return closureCache[K]{
+	return &ClosureCache[K]{
 		ttl:        ttl,
 		maxEntries: maxEntries,
 		ll:         list.New(),
@@ -45,14 +46,14 @@ func newClosureCache[K comparable](ttl time.Duration, maxEntries int) closureCac
 }
 
 // Len returns the current number of entries in the cache
-func (c *closureCache[K]) Len() int {
+func (c *ClosureCache[K]) Len() int {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return len(c.m)
 }
 
 // Get retrieves a bitmap from the cache, updating LRU position if found
-func (c *closureCache[K]) Get(k K) (*roaring.Bitmap, bool) {
+func (c *ClosureCache[K]) Get(k K) (*roaring.Bitmap, bool) {
 	now := time.Now()
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -77,7 +78,7 @@ func (c *closureCache[K]) Get(k K) (*roaring.Bitmap, bool) {
 }
 
 // Put stores a bitmap in the cache, evicting if necessary
-func (c *closureCache[K]) Put(k K, bmp *roaring.Bitmap) {
+func (c *ClosureCache[K]) Put(k K, bmp *roaring.Bitmap) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -123,7 +124,7 @@ func (c *closureCache[K]) Put(k K, bmp *roaring.Bitmap) {
 }
 
 // Delete removes a key from the cache
-func (c *closureCache[K]) Delete(k K) {
+func (c *ClosureCache[K]) Delete(k K) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -136,7 +137,7 @@ func (c *closureCache[K]) Delete(k K) {
 }
 
 // Clear removes all entries from the cache
-func (c *closureCache[K]) Clear() {
+func (c *ClosureCache[K]) Clear() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -146,7 +147,7 @@ func (c *closureCache[K]) Clear() {
 
 // cleanupExpiredLocked removes up to maxExpired expired entries from the back
 // Must be called with lock held
-func (c *closureCache[K]) cleanupExpiredLocked(maxExpired int) {
+func (c *ClosureCache[K]) cleanupExpiredLocked(maxExpired int) {
 	now := time.Now()
 	removed := 0
 	for removed < maxExpired {
@@ -167,11 +168,12 @@ func (c *closureCache[K]) cleanupExpiredLocked(maxExpired int) {
 }
 
 // Evictions returns the number of evictions that have occurred
-func (c *closureCache[K]) Evictions() uint64 {
+func (c *ClosureCache[K]) Evictions() uint64 {
 	return c.evictions.Load()
 }
 
 // ExpiredDeletes returns the number of expired entries deleted
-func (c *closureCache[K]) ExpiredDeletes() uint64 {
+func (c *ClosureCache[K]) ExpiredDeletes() uint64 {
 	return c.expiredDeletes.Load()
 }
+

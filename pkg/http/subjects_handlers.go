@@ -1,4 +1,4 @@
-package server
+package http
 
 import (
 	"encoding/json"
@@ -23,7 +23,7 @@ import (
 // @Param cursor query string false "Pagination cursor"
 // @Success 200 {object} ListSubjectsResponse
 // @Router /api/v1/subjects [get]
-func (h *BaseServer) ListSubjects(w http.ResponseWriter, r *http.Request) {
+func (s *HTTP) ListSubjects(w http.ResponseWriter, r *http.Request) {
 	if IsMockMode(r.Context()) {
 		mock.ListSubjects(w, r)
 		return
@@ -44,7 +44,7 @@ func (h *BaseServer) ListSubjects(w http.ResponseWriter, r *http.Request) {
 	}
 	cursor := r.URL.Query().Get("cursor")
 
-	users, nextCursor, hasMore, err := h.engine.GetDB().ListSubjects(r.Context(), tenantID, query, limit, cursor)
+	users, nextCursor, hasMore, err := s.engine.GetDB().ListSubjects(r.Context(), tenantID, query, limit, cursor)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return
@@ -91,10 +91,10 @@ func (h *BaseServer) ListSubjects(w http.ResponseWriter, r *http.Request) {
 // @Tags subjects
 // @Accept json
 // @Produce json
-// @Param request body CreateSubjectRequest true "Subject data"
-// @Success 201 {object} SubjectResponse
+// @Param request body api.CreateSubjectRequest true "Subject data"
+// @Success 201 {object} api.SubjectResponse
 // @Router /api/v1/subjects [post]
-func (h *BaseServer) CreateSubject(w http.ResponseWriter, r *http.Request) {
+func (s *HTTP) CreateSubject(w http.ResponseWriter, r *http.Request) {
 	if IsMockMode(r.Context()) {
 		mock.CreateSubject(w, r)
 		return
@@ -106,7 +106,7 @@ func (h *BaseServer) CreateSubject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var req CreateSubjectRequest
+	var req api.CreateSubjectRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		respondError(w, http.StatusBadRequest, "INVALID_REQUEST", err.Error())
 		return
@@ -123,7 +123,7 @@ func (h *BaseServer) CreateSubject(w http.ResponseWriter, r *http.Request) {
 		Display:    req.Display,
 	}
 
-	revision, err := h.engine.GetDB().CreateSubject(r.Context(), tenantID, user)
+	revision, err := s.engine.GetDB().CreateSubject(r.Context(), tenantID, user)
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
 			respondError(w, http.StatusNotFound, "NOT_FOUND", err.Error())
@@ -133,8 +133,8 @@ func (h *BaseServer) CreateSubject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	response := SubjectResponse{
-		Subject: Subject{
+	response := api.SubjectResponse{
+		Subject: api.Subject{
 			ID:         user.ID,
 			ExternalID: user.ExternalID,
 			Email:      user.Email,
@@ -157,7 +157,7 @@ func (h *BaseServer) CreateSubject(w http.ResponseWriter, r *http.Request) {
 // @Param id path string true "Subject ID"
 // @Success 200 {object} Subject
 // @Router /api/v1/subjects/{id} [get]
-func (h *BaseServer) GetSubject(w http.ResponseWriter, r *http.Request) {
+func (s *HTTP) GetSubject(w http.ResponseWriter, r *http.Request) {
 	if IsMockMode(r.Context()) {
 		mock.GetSubject(w, r)
 		return
@@ -176,7 +176,7 @@ func (h *BaseServer) GetSubject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user, err := h.engine.GetDB().GetSubject(r.Context(), tenantID, id)
+	user, err := s.engine.GetDB().GetSubject(r.Context(), tenantID, id)
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
 			respondError(w, http.StatusNotFound, "NOT_FOUND", "Subject not found")
@@ -214,9 +214,9 @@ func (h *BaseServer) GetSubject(w http.ResponseWriter, r *http.Request) {
 // @Produce json
 // @Param id path string true "Subject ID"
 // @Param request body UpdateSubjectRequest true "Update data"
-// @Success 200 {object} SubjectResponse
+// @Success 200 {object} api.SubjectResponse
 // @Router /api/v1/subjects/{id} [patch]
-func (h *BaseServer) UpdateSubject(w http.ResponseWriter, r *http.Request) {
+func (s *HTTP) UpdateSubject(w http.ResponseWriter, r *http.Request) {
 	if IsMockMode(r.Context()) {
 		mock.UpdateSubject(w, r)
 		return
@@ -254,7 +254,7 @@ func (h *BaseServer) UpdateSubject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	revision, err := h.engine.GetDB().UpdateSubject(r.Context(), tenantID, id, updates)
+	revision, err := s.engine.GetDB().UpdateSubject(r.Context(), tenantID, id, updates)
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
 			respondError(w, http.StatusNotFound, "NOT_FOUND", "Subject not found")
@@ -265,7 +265,7 @@ func (h *BaseServer) UpdateSubject(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Fetch updated subject
-	user, _ := h.engine.GetDB().GetSubject(r.Context(), tenantID, id)
+	user, _ := s.engine.GetDB().GetSubject(r.Context(), tenantID, id)
 
 	displayName := user.Display
 	if displayName == "" {
@@ -297,7 +297,7 @@ func (h *BaseServer) UpdateSubject(w http.ResponseWriter, r *http.Request) {
 // @Param id path string true "Subject ID"
 // @Success 204 "No Content"
 // @Router /api/v1/subjects/{id} [delete]
-func (h *BaseServer) DeleteSubject(w http.ResponseWriter, r *http.Request) {
+func (s *HTTP) DeleteSubject(w http.ResponseWriter, r *http.Request) {
 	if IsMockMode(r.Context()) {
 		mock.DeleteSubject(w, r)
 		return
@@ -316,7 +316,7 @@ func (h *BaseServer) DeleteSubject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, err = h.engine.GetDB().DeleteSubject(r.Context(), tenantID, id)
+	_, err = s.engine.GetDB().DeleteSubject(r.Context(), tenantID, id)
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
 			respondError(w, http.StatusNotFound, "NOT_FOUND", "Subject not found")
@@ -339,7 +339,7 @@ func (h *BaseServer) DeleteSubject(w http.ResponseWriter, r *http.Request) {
 // @Param cursor query string false "Pagination cursor"
 // @Success 200 {object} SearchResponse
 // @Router /api/v1/subject-sets [get]
-func (h *BaseServer) ListSubjectGroups(w http.ResponseWriter, r *http.Request) {
+func (s *HTTP) ListSubjectGroups(w http.ResponseWriter, r *http.Request) {
 	if IsMockMode(r.Context()) {
 		mock.ListSubjectGroups(w, r)
 		return
@@ -360,23 +360,23 @@ func (h *BaseServer) ListSubjectGroups(w http.ResponseWriter, r *http.Request) {
 	}
 	cursor := r.URL.Query().Get("cursor")
 
-	uas, nextCursor, hasMore, err := h.engine.GetDB().ListSubjectGroups(r.Context(), tenantID, query, limit, cursor)
+	uas, nextCursor, hasMore, err := s.engine.GetDB().ListSubjectGroups(r.Context(), tenantID, query, limit, cursor)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return
 	}
 
-	groups := make([]api.SubjectGroup, len(uas))
+	groups := make([]api.SubjectSet, len(uas))
 	for i, ua := range uas {
-		groups[i] = api.SubjectGroup{
-			ID:              ua.ID,
-			Name:            ua.Name,
-			Description:     "",
-			ScopeID:         nil,
-			Tags:            []string{},
+		groups[i] = api.SubjectSet{
+			ID:               ua.ID,
+			Name:             ua.Name,
+			Description:      "",
+			ScopeID:          nil,
+			Tags:             []string{},
 			MemberSubjectIDs: []uuid.UUID{}, // TODO: Populate from relationships
-			CreatedAt:       ua.CreatedAt,
-			UpdatedAt:       nil,
+			CreatedAt:        ua.CreatedAt,
+			UpdatedAt:        nil,
 		}
 	}
 
@@ -386,7 +386,7 @@ func (h *BaseServer) ListSubjectGroups(w http.ResponseWriter, r *http.Request) {
 	}
 	total := len(groups)
 
-	response := api.SearchResponse[api.SubjectGroup]{
+	response := api.SearchResponse[api.SubjectSet]{
 		Items:      groups,
 		NextCursor: nextCursorPtr,
 		Total:      &total,
@@ -403,9 +403,9 @@ func (h *BaseServer) ListSubjectGroups(w http.ResponseWriter, r *http.Request) {
 // @Accept json
 // @Produce json
 // @Param request body CreateSubjectGroupRequest true "Set data"
-// @Success 201 {object} SubjectGroupResponse
+// @Success 201 {object} api.SubjectGroupResponse
 // @Router /api/v1/subject-sets [post]
-func (h *BaseServer) CreateSubjectGroup(w http.ResponseWriter, r *http.Request) {
+func (s *HTTP) CreateSubjectGroup(w http.ResponseWriter, r *http.Request) {
 	if IsMockMode(r.Context()) {
 		mock.CreateSubjectGroup(w, r)
 		return
@@ -417,7 +417,7 @@ func (h *BaseServer) CreateSubjectGroup(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	var req CreateSubjectGroupRequest
+	var req CreateSubjectSetRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		respondError(w, http.StatusBadRequest, "INVALID_REQUEST", err.Error())
 		return
@@ -432,14 +432,14 @@ func (h *BaseServer) CreateSubjectGroup(w http.ResponseWriter, r *http.Request) 
 		Name: req.Name,
 	}
 
-	revision, err := h.engine.GetDB().CreateSubjectGroup(r.Context(), tenantID, ua)
+	revision, err := s.engine.GetDB().CreateSubjectGroup(r.Context(), tenantID, ua)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return
 	}
 
-	response := SubjectGroupResponse{
-		Group: SubjectGroup{
+	response := api.SubjectGroupResponse{
+		Group: api.SubjectSet{
 			ID:        ua.ID,
 			Name:      ua.Name,
 			CreatedAt: ua.CreatedAt,
@@ -458,9 +458,9 @@ func (h *BaseServer) CreateSubjectGroup(w http.ResponseWriter, r *http.Request) 
 // @Tags subject-sets
 // @Produce json
 // @Param id path string true "Set ID"
-// @Success 200 {object} SubjectGroup
+// @Success 200 {object} api.SubjectSet
 // @Router /api/v1/subject-sets/{id} [get]
-func (h *BaseServer) GetSubjectGroup(w http.ResponseWriter, r *http.Request) {
+func (s *HTTP) GetSubjectGroup(w http.ResponseWriter, r *http.Request) {
 	if IsMockMode(r.Context()) {
 		mock.GetSubjectGroup(w, r)
 		return
@@ -479,17 +479,17 @@ func (h *BaseServer) GetSubjectGroup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ua, err := h.engine.GetDB().GetSubjectGroup(r.Context(), tenantID, id)
+	ua, err := s.engine.GetDB().GetSubjectGroup(r.Context(), tenantID, id)
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
-			respondError(w, http.StatusNotFound, "NOT_FOUND", "Subject group not found")
+			respondError(w, http.StatusNotFound, "NOT_FOUND", "subject set not found")
 			return
 		}
 		respondError(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return
 	}
 
-	group := SubjectGroup{
+	group := api.SubjectSet{
 		ID:        ua.ID,
 		Name:      ua.Name,
 		CreatedAt: ua.CreatedAt,
@@ -507,9 +507,9 @@ func (h *BaseServer) GetSubjectGroup(w http.ResponseWriter, r *http.Request) {
 // @Produce json
 // @Param id path string true "Set ID"
 // @Param request body UpdateSubjectGroupRequest true "Update data"
-// @Success 200 {object} SubjectGroupResponse
+// @Success 200 {object} api.SubjectGroupResponse
 // @Router /api/v1/subject-sets/{id} [patch]
-func (h *BaseServer) UpdateSubjectGroup(w http.ResponseWriter, r *http.Request) {
+func (s *HTTP) UpdateSubjectGroup(w http.ResponseWriter, r *http.Request) {
 	if IsMockMode(r.Context()) {
 		mock.UpdateSubjectGroup(w, r)
 		return
@@ -528,7 +528,7 @@ func (h *BaseServer) UpdateSubjectGroup(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	var req UpdateSubjectGroupRequest
+	var req UpdateSubjectSetRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		respondError(w, http.StatusBadRequest, "INVALID_REQUEST", err.Error())
 		return
@@ -539,20 +539,20 @@ func (h *BaseServer) UpdateSubjectGroup(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	revision, err := h.engine.GetDB().UpdateSubjectGroup(r.Context(), tenantID, id, req.Name)
+	revision, err := s.engine.GetDB().UpdateSubjectGroup(r.Context(), tenantID, id, req.Name)
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
-			respondError(w, http.StatusNotFound, "NOT_FOUND", "Subject group not found")
+			respondError(w, http.StatusNotFound, "NOT_FOUND", "subject set not found")
 			return
 		}
 		respondError(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return
 	}
 
-	ua, _ := h.engine.GetDB().GetSubjectGroup(r.Context(), tenantID, id)
+	ua, _ := s.engine.GetDB().GetSubjectGroup(r.Context(), tenantID, id)
 
-	response := SubjectGroupResponse{
-		Group: SubjectGroup{
+	response := api.SubjectGroupResponse{
+		Group: api.SubjectSet{
 			ID:        ua.ID,
 			Name:      ua.Name,
 			CreatedAt: ua.CreatedAt,
@@ -571,7 +571,7 @@ func (h *BaseServer) UpdateSubjectGroup(w http.ResponseWriter, r *http.Request) 
 // @Param id path string true "Set ID"
 // @Success 204 "No Content"
 // @Router /api/v1/subject-sets/{id} [delete]
-func (h *BaseServer) DeleteSubjectGroup(w http.ResponseWriter, r *http.Request) {
+func (s *HTTP) DeleteSubjectGroup(w http.ResponseWriter, r *http.Request) {
 	if IsMockMode(r.Context()) {
 		mock.DeleteSubjectGroup(w, r)
 		return
@@ -590,10 +590,10 @@ func (h *BaseServer) DeleteSubjectGroup(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	_, err = h.engine.GetDB().DeleteSubjectGroup(r.Context(), tenantID, id)
+	_, err = s.engine.GetDB().DeleteSubjectGroup(r.Context(), tenantID, id)
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
-			respondError(w, http.StatusNotFound, "NOT_FOUND", "Subject group not found")
+			respondError(w, http.StatusNotFound, "NOT_FOUND", "subject set not found")
 			return
 		}
 		respondError(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
@@ -602,4 +602,3 @@ func (h *BaseServer) DeleteSubjectGroup(w http.ResponseWriter, r *http.Request) 
 
 	w.WriteHeader(http.StatusNoContent)
 }
-

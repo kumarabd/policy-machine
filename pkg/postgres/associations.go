@@ -37,3 +37,4 @@ func CreateAssociation(ctx context.Context, db *gorm.DB, tenantID, uaID, oaID uu
 		return nil
 	})
 }
+

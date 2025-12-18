@@ -1,4 +1,4 @@
-package server
+package http
 
 import (
 	"encoding/json"
@@ -18,7 +18,7 @@ import (
 // @Produce json
 // @Success 200 {object} MetaResponse
 // @Router /api/v1/meta [get]
-func (h *BaseServer) GetMeta(w http.ResponseWriter, r *http.Request) {
+func (s *HTTP) GetMeta(w http.ResponseWriter, r *http.Request) {
 	if IsMockMode(r.Context()) {
 		mock.GetMeta(w, r)
 		return
@@ -31,7 +31,7 @@ func (h *BaseServer) GetMeta(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get current revision
-	db := h.engine.GetDB()
+	db := s.engine.GetDB()
 	rev, err := db.GetCurrentRevision(r.Context(), tenantID)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
@@ -61,7 +61,7 @@ func (h *BaseServer) GetMeta(w http.ResponseWriter, r *http.Request) {
 // @Produce json
 // @Success 200 {object} RevisionResponse
 // @Router /api/v1/revisions/current [get]
-func (h *BaseServer) GetCurrentRevision(w http.ResponseWriter, r *http.Request) {
+func (s *HTTP) GetCurrentRevision(w http.ResponseWriter, r *http.Request) {
 	if IsMockMode(r.Context()) {
 		mock.GetCurrentRevision(w, r)
 		return
@@ -73,7 +73,7 @@ func (h *BaseServer) GetCurrentRevision(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	rev, err := h.engine.GetDB().GetCurrentRevision(r.Context(), tenantID)
+	rev, err := s.engine.GetDB().GetCurrentRevision(r.Context(), tenantID)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return
@@ -97,7 +97,7 @@ func (h *BaseServer) GetCurrentRevision(w http.ResponseWriter, r *http.Request) 
 // @Param limit query int false "Maximum number of changes to return (default: 100, max: 1000)"
 // @Success 200 {object} ChangesResponse
 // @Router /api/v1/changes [get]
-func (h *BaseServer) GetPolicyChanges(w http.ResponseWriter, r *http.Request) {
+func (s *HTTP) GetPolicyChanges(w http.ResponseWriter, r *http.Request) {
 	if IsMockMode(r.Context()) {
 		mock.GetPolicyChanges(w, r)
 		return
@@ -123,7 +123,7 @@ func (h *BaseServer) GetPolicyChanges(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	changes, err := h.engine.GetDB().GetPolicyChanges(r.Context(), tenantID, afterSeq, limit)
+	changes, err := s.engine.GetDB().GetPolicyChanges(r.Context(), tenantID, afterSeq, limit)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return
@@ -169,7 +169,7 @@ func (h *BaseServer) GetPolicyChanges(w http.ResponseWriter, r *http.Request) {
 // @Param limit query int false "Page size (default: 20, max: 100)"
 // @Success 200 {object} ListVersionsResponse
 // @Router /api/v1/versions [get]
-func (h *BaseServer) ListVersions(w http.ResponseWriter, r *http.Request) {
+func (s *HTTP) ListVersions(w http.ResponseWriter, r *http.Request) {
 	if IsMockMode(r.Context()) {
 		mock.ListVersions(w, r)
 		return
@@ -192,7 +192,7 @@ func (h *BaseServer) ListVersions(w http.ResponseWriter, r *http.Request) {
 	cursor := r.URL.Query().Get("cursor")
 
 	// Get policy changes grouped by revision
-	changes, err := h.engine.GetDB().GetPolicyChanges(r.Context(), tenantID, 0, 10000) // Get all changes
+	changes, err := s.engine.GetDB().GetPolicyChanges(r.Context(), tenantID, 0, 10000) // Get all changes
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return

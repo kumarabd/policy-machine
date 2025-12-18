@@ -12,7 +12,7 @@ func (e *Engine) UserUAClosure(s *Snapshot, userID uuid.UUID) *roaring.Bitmap {
 
 // userUAClosure returns bitmap of UA indices reachable from user's assigned UAs (including them)
 func (e *Engine) userUAClosure(s *Snapshot, userID uuid.UUID) *roaring.Bitmap {
-	if bmp, ok := e.uaCache.Get(userID); ok {
+	if bmp, ok := e.caches.UACache.Get(userID); ok {
 		return bmp
 	}
 
@@ -21,7 +21,7 @@ func (e *Engine) userUAClosure(s *Snapshot, userID uuid.UUID) *roaring.Bitmap {
 		out.Or(e.uaNodeAllParents(s, ua))
 	}
 
-	e.uaCache.Put(userID, out)
+	e.caches.UACache.Put(userID, out)
 	return out
 }
 
@@ -32,7 +32,7 @@ func (e *Engine) ObjectOAClosure(s *Snapshot, objectID uuid.UUID) *roaring.Bitma
 
 // objectOAClosure returns bitmap of OA indices reachable from object's assigned OAs (including them)
 func (e *Engine) objectOAClosure(s *Snapshot, objectID uuid.UUID) *roaring.Bitmap {
-	if bmp, ok := e.oaCache.Get(objectID); ok {
+	if bmp, ok := e.caches.OACache.Get(objectID); ok {
 		return bmp
 	}
 
@@ -41,6 +41,6 @@ func (e *Engine) objectOAClosure(s *Snapshot, objectID uuid.UUID) *roaring.Bitma
 		out.Or(e.oaNodeAllParents(s, oa))
 	}
 
-	e.oaCache.Put(objectID, out)
+	e.caches.OACache.Put(objectID, out)
 	return out
 }

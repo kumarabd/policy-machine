@@ -1,4 +1,4 @@
-package engine
+package cache
 
 import (
 	"container/list"
@@ -20,8 +20,8 @@ type userOpKey struct {
 	op   string
 }
 
-// userOpBitmapCache is a bounded nested cache with LRU eviction
-type userOpBitmapCache struct {
+// UserOpBitmapCache is a bounded nested cache with LRU eviction
+type UserOpBitmapCache struct {
 	ttl         time.Duration
 	maxUsers    int
 	maxEntries  int
@@ -34,14 +34,15 @@ type userOpBitmapCache struct {
 	expiredDeletes atomic.Uint64
 }
 
-func newUserOpBitmapCache(ttl time.Duration, maxUsers, maxEntries int) *userOpBitmapCache {
+// NewUserOpBitmapCache creates a new user-operation bitmap cache
+func NewUserOpBitmapCache(ttl time.Duration, maxUsers, maxEntries int) *UserOpBitmapCache {
 	if maxUsers <= 0 {
 		maxUsers = 10000 // Default
 	}
 	if maxEntries <= 0 {
 		maxEntries = 100000 // Default
 	}
-	return &userOpBitmapCache{
+	return &UserOpBitmapCache{
 		ttl:        ttl,
 		maxUsers:   maxUsers,
 		maxEntries: maxEntries,
@@ -52,14 +53,14 @@ func newUserOpBitmapCache(ttl time.Duration, maxUsers, maxEntries int) *userOpBi
 }
 
 // LenUsers returns the number of unique users in the cache
-func (c *userOpBitmapCache) LenUsers() int {
+func (c *UserOpBitmapCache) LenUsers() int {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return len(c.m)
 }
 
 // LenEntries returns the total number of (user,op) entries
-func (c *userOpBitmapCache) LenEntries() int {
+func (c *UserOpBitmapCache) LenEntries() int {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	total := 0
@@ -69,7 +70,7 @@ func (c *userOpBitmapCache) LenEntries() int {
 	return total
 }
 
-func (c *userOpBitmapCache) Get(user uuid.UUID, op string) (*roaring.Bitmap, bool) {
+func (c *UserOpBitmapCache) Get(user uuid.UUID, op string) (*roaring.Bitmap, bool) {
 	now := time.Now()
 	key := userOpKey{user: user, op: op}
 
@@ -108,7 +109,7 @@ func (c *userOpBitmapCache) Get(user uuid.UUID, op string) (*roaring.Bitmap, boo
 	return e.bmp, true
 }
 
-func (c *userOpBitmapCache) Put(user uuid.UUID, op string, bmp *roaring.Bitmap) {
+func (c *UserOpBitmapCache) Put(user uuid.UUID, op string, bmp *roaring.Bitmap) {
 	now := time.Now()
 	key := userOpKey{user: user, op: op}
 
@@ -155,7 +156,7 @@ func (c *userOpBitmapCache) Put(user uuid.UUID, op string, bmp *roaring.Bitmap) 
 	c.lruIndex[key] = elem
 }
 
-func (c *userOpBitmapCache) DeleteUser(user uuid.UUID) {
+func (c *UserOpBitmapCache) DeleteUser(user uuid.UUID) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -176,7 +177,7 @@ func (c *userOpBitmapCache) DeleteUser(user uuid.UUID) {
 	delete(c.m, user)
 }
 
-func (c *userOpBitmapCache) DeleteUserOp(user uuid.UUID, op string) {
+func (c *UserOpBitmapCache) DeleteUserOp(user uuid.UUID, op string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -198,7 +199,7 @@ func (c *userOpBitmapCache) DeleteUserOp(user uuid.UUID, op string) {
 	}
 }
 
-func (c *userOpBitmapCache) Clear() {
+func (c *UserOpBitmapCache) Clear() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -209,7 +210,7 @@ func (c *userOpBitmapCache) Clear() {
 
 // evictLRUUserLocked evicts the least recently used user and all their entries
 // Must be called with lock held
-func (c *userOpBitmapCache) evictLRUUserLocked() {
+func (c *UserOpBitmapCache) evictLRUUserLocked() {
 	// Find a user by looking at the back of the LRU list
 	// Keep going until we find a user and remove all their entries
 	seenUsers := make(map[uuid.UUID]struct{})
@@ -254,7 +255,7 @@ func (c *userOpBitmapCache) evictLRUUserLocked() {
 
 // evictLRUEntryLocked evicts the least recently used (user,op) entry
 // Must be called with lock held
-func (c *userOpBitmapCache) evictLRUEntryLocked() {
+func (c *UserOpBitmapCache) evictLRUEntryLocked() {
 	back := c.ll.Back()
 	if back == nil {
 		return
@@ -277,7 +278,7 @@ func (c *userOpBitmapCache) evictLRUEntryLocked() {
 
 // cleanupExpiredLocked removes up to maxExpired expired entries from the back
 // Must be called with lock held
-func (c *userOpBitmapCache) cleanupExpiredLocked(maxExpired int) {
+func (c *UserOpBitmapCache) cleanupExpiredLocked(maxExpired int) {
 	now := time.Now()
 	removed := 0
 	for removed < maxExpired {
@@ -310,11 +311,12 @@ func (c *userOpBitmapCache) cleanupExpiredLocked(maxExpired int) {
 }
 
 // Evictions returns the number of evictions that have occurred
-func (c *userOpBitmapCache) Evictions() uint64 {
+func (c *UserOpBitmapCache) Evictions() uint64 {
 	return c.evictions.Load()
 }
 
 // ExpiredDeletes returns the number of expired entries deleted
-func (c *userOpBitmapCache) ExpiredDeletes() uint64 {
+func (c *UserOpBitmapCache) ExpiredDeletes() uint64 {
 	return c.expiredDeletes.Load()
 }
+

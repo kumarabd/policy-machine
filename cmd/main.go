@@ -92,7 +92,7 @@ func main() {
 	}
 
 	// Initialize a new engine with the logger, metrics handler, database handler, and engine configuration
-	engine := engine.New(log, metricsHandler, dbHandler, configHandler.Engine, nil)
+	engine := engine.New(log, metricsHandler, dbHandler, configHandler.Engine, nil, nil)
 	log.Info().Msg("engine initialized")
 
 	// Initialize a new server with the logger, metrics handler, server configuration, and engine

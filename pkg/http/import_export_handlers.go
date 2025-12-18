@@ -1,4 +1,4 @@
-package server
+package http
 
 import (
 	"encoding/json"
@@ -12,7 +12,7 @@ import (
 )
 
 // ExportPolicy exports the entire policy as a bundle
-func (h *BaseServer) ExportPolicy(w http.ResponseWriter, r *http.Request) {
+func (s *HTTP) ExportPolicy(w http.ResponseWriter, r *http.Request) {
 	if IsMockMode(r.Context()) {
 		mock.ExportPolicy(w, r)
 		return
@@ -25,18 +25,18 @@ func (h *BaseServer) ExportPolicy(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get all entities
-	users, _, _, _ := h.engine.GetDB().ListSubjects(r.Context(), tenantID, "", 10000, "")
-	uas, _, _, _ := h.engine.GetDB().ListSubjectGroups(r.Context(), tenantID, "", 10000, "")
-	objects, _, _, _ := h.engine.GetDB().ListObjects(r.Context(), tenantID, "", 10000, "")
-	oas, _, _, _ := h.engine.GetDB().ListObjectGroups(r.Context(), tenantID, "", 10000, "")
-	edges, _, _, _ := h.engine.GetDB().ListRelationships(r.Context(), tenantID, map[string]interface{}{}, 10000, "")
-	_, assocs, _, _, _ := h.engine.GetDB().ListRules(r.Context(), tenantID, map[string]interface{}{}, 10000, "")
-	_, prohs, _, _, _ := h.engine.GetDB().ListDenies(r.Context(), tenantID, map[string]interface{}{}, 10000, "")
+	users, _, _, _ := s.engine.GetDB().ListSubjects(r.Context(), tenantID, "", 10000, "")
+	uas, _, _, _ := s.engine.GetDB().ListSubjectGroups(r.Context(), tenantID, "", 10000, "")
+	objects, _, _, _ := s.engine.GetDB().ListObjects(r.Context(), tenantID, "", 10000, "")
+	oas, _, _, _ := s.engine.GetDB().ListObjectGroups(r.Context(), tenantID, "", 10000, "")
+	edges, _, _, _ := s.engine.GetDB().ListRelationships(r.Context(), tenantID, map[string]interface{}{}, 10000, "")
+	_, assocs, _, _, _ := s.engine.GetDB().ListRules(r.Context(), tenantID, map[string]interface{}{}, 10000, "")
+	_, prohs, _, _, _ := s.engine.GetDB().ListDenies(r.Context(), tenantID, map[string]interface{}{}, 10000, "")
 
 	// Convert to API models
 	subjects := make([]Subject, len(users))
 	for i, u := range users {
-		subjects[i] = Subject{
+		subjects[i] = api.Subject{
 			ID:         u.ID,
 			ExternalID: u.ExternalID,
 			Email:      u.Email,
@@ -45,9 +45,9 @@ func (h *BaseServer) ExportPolicy(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	subjectGroups := make([]SubjectGroup, len(uas))
+	subjectSets := make([]api.SubjectSet, len(uas))
 	for i, ua := range uas {
-		subjectGroups[i] = SubjectGroup{
+		subjectSets[i] = api.SubjectSet{
 			ID:        ua.ID,
 			Name:      ua.Name,
 			CreatedAt: ua.CreatedAt,
@@ -56,7 +56,7 @@ func (h *BaseServer) ExportPolicy(w http.ResponseWriter, r *http.Request) {
 
 	objs := make([]Object, len(objects))
 	for i, o := range objects {
-		objs[i] = Object{
+		objs[i] = api.Object{
 			ID:         o.ID,
 			ExternalID: o.ExternalID,
 			Type:       o.Type,
@@ -64,9 +64,9 @@ func (h *BaseServer) ExportPolicy(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	objectGroups := make([]ObjectGroup, len(oas))
+	objectSets := make([]ObjectSet, len(oas))
 	for i, oa := range oas {
-		objectGroups[i] = ObjectGroup{
+		objectSets[i] = api.ObjectSet{
 			ID:        oa.ID,
 			Name:      oa.Name,
 			CreatedAt: oa.CreatedAt,
@@ -136,14 +136,14 @@ func (h *BaseServer) ExportPolicy(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	rev, _ := h.engine.GetDB().GetCurrentRevision(r.Context(), tenantID)
+	rev, _ := s.engine.GetDB().GetCurrentRevision(r.Context(), tenantID)
 
 	bundle := PolicyBundle{
 		Revision:      rev,
 		Subjects:      subjects,
-		SubjectSets:   subjectGroups,
+		SubjectSets:   subjectSets,
 		Objects:       objs,
-		ObjectSets:    objectGroups,
+		ObjectSets:    objectSets,
 		Relationships: relationships,
 		Rules:         rules,
 		Denies:        denies,
@@ -154,7 +154,7 @@ func (h *BaseServer) ExportPolicy(w http.ResponseWriter, r *http.Request) {
 }
 
 // ImportPolicy imports a policy bundle
-func (h *BaseServer) ImportPolicy(w http.ResponseWriter, r *http.Request) {
+func (s *HTTP) ImportPolicy(w http.ResponseWriter, r *http.Request) {
 	if IsMockMode(r.Context()) {
 		mock.ImportPolicy(w, r)
 		return
@@ -186,7 +186,7 @@ func (h *BaseServer) ImportPolicy(w http.ResponseWriter, r *http.Request) {
 			Email:      subj.Email,
 			Display:    subj.Display,
 		}
-		_, err := h.engine.GetDB().CreateSubject(r.Context(), tenantID, user)
+		_, err := s.engine.GetDB().CreateSubject(r.Context(), tenantID, user)
 		if err == nil {
 			applied++
 		}
@@ -195,7 +195,7 @@ func (h *BaseServer) ImportPolicy(w http.ResponseWriter, r *http.Request) {
 	// Import subject sets
 	for _, sg := range req.Bundle.SubjectSets {
 		ua := &postgres.UserAttribute{Name: sg.Name}
-		_, err := h.engine.GetDB().CreateSubjectGroup(r.Context(), tenantID, ua)
+		_, err := s.engine.GetDB().CreateSubjectGroup(r.Context(), tenantID, ua)
 		if err == nil {
 			applied++
 		}
@@ -207,7 +207,7 @@ func (h *BaseServer) ImportPolicy(w http.ResponseWriter, r *http.Request) {
 			ExternalID: obj.ExternalID,
 			Type:       obj.Type,
 		}
-		_, err := h.engine.GetDB().CreateObject(r.Context(), tenantID, o)
+		_, err := s.engine.GetDB().CreateObject(r.Context(), tenantID, o)
 		if err == nil {
 			applied++
 		}
@@ -216,7 +216,7 @@ func (h *BaseServer) ImportPolicy(w http.ResponseWriter, r *http.Request) {
 	// Import object sets
 	for _, og := range req.Bundle.ObjectSets {
 		oa := &postgres.ObjectAttribute{Name: og.Name}
-		_, err := h.engine.GetDB().CreateObjectGroup(r.Context(), tenantID, oa)
+		_, err := s.engine.GetDB().CreateObjectGroup(r.Context(), tenantID, oa)
 		if err == nil {
 			applied++
 		}
@@ -234,7 +234,7 @@ func (h *BaseServer) ImportPolicy(w http.ResponseWriter, r *http.Request) {
 			ParentType: parentType,
 			ParentID:   rel.To.ID,
 		}
-		_, err = h.engine.GetDB().CreateRelationship(r.Context(), tenantID, edge)
+		_, err = s.engine.GetDB().CreateRelationship(r.Context(), tenantID, edge)
 		if err == nil {
 			applied++
 		}
@@ -242,7 +242,7 @@ func (h *BaseServer) ImportPolicy(w http.ResponseWriter, r *http.Request) {
 
 	// Import rules
 	for _, rule := range req.Bundle.Rules {
-		_, _, err := h.engine.GetDB().CreateRule(r.Context(), tenantID, rule.SubjectSelector.ID, rule.ObjectSelector.ID, rule.Actions)
+		_, _, err := s.engine.GetDB().CreateRule(r.Context(), tenantID, rule.SubjectSelector.ID, rule.ObjectSelector.ID, rule.Actions)
 		if err == nil {
 			applied++
 		}
@@ -255,14 +255,14 @@ func (h *BaseServer) ImportPolicy(w http.ResponseWriter, r *http.Request) {
 			subjectType = postgres.ProhibitUA
 		}
 		if len(deny.Targets) > 0 {
-			_, _, err := h.engine.GetDB().CreateDeny(r.Context(), tenantID, subjectType, deny.Subject.ID, deny.Targets[0].ID, deny.Operations)
+			_, _, err := s.engine.GetDB().CreateDeny(r.Context(), tenantID, subjectType, deny.Subject.ID, deny.Targets[0].ID, deny.Operations)
 			if err == nil {
 				applied++
 			}
 		}
 	}
 
-	rev, _ := h.engine.GetDB().GetCurrentRevision(r.Context(), tenantID)
+	rev, _ := s.engine.GetDB().GetCurrentRevision(r.Context(), tenantID)
 
 	response := ImportPolicyResponse{
 		Revision: rev,
@@ -274,4 +274,3 @@ func (h *BaseServer) ImportPolicy(w http.ResponseWriter, r *http.Request) {
 }
 
 // Helper functions use the ones from relationships_handlers.go
-

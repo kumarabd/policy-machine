@@ -74,8 +74,8 @@ func (e *Engine) RefreshIncremental(ctx context.Context) error {
 	e.cur.Store(next)
 	e.computeUserOpInvalidationsFromOADescChanges(s, inv)
 	e.applyInvalidations(inv)
-	e.uaCache.Clear()
-	e.oaCache.Clear()
+	e.caches.UACache.Clear()
+	e.caches.OACache.Clear()
 
 	go e.Warmup(next, inv) // or call synchronously if you prefer deterministic behavior
 

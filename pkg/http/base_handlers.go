@@ -1,4 +1,4 @@
-package server
+package http
 
 import (
 	"encoding/json"
@@ -7,7 +7,7 @@ import (
 	"github.com/swaggo/swag"
 )
 
-func (h *BaseServer) MetricsHandler(w http.ResponseWriter, r *http.Request) {
+func (s *HTTP) MetricsHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/plain")
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("# Metrics endpoint placeholder\n"))
@@ -20,14 +20,14 @@ func (h *BaseServer) MetricsHandler(w http.ResponseWriter, r *http.Request) {
 // @Produce json
 // @Success 200 {object} object{status=string} "Service is healthy"
 // @Router /healthz [get]
-func (h *BaseServer) HealthHandler(w http.ResponseWriter, r *http.Request) {
+func (s *HTTP) HealthHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 }
 
 // SwaggerJSONHandler serves the swagger.json file
-func (h *BaseServer) SwaggerJSONHandler(w http.ResponseWriter, r *http.Request) {
+func (s *HTTP) SwaggerJSONHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 

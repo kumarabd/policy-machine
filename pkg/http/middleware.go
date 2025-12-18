@@ -1,8 +1,7 @@
-package server
+package http
 
 import (
 	"context"
-	"encoding/json"
 	"net/http"
 	"strconv"
 	"strings"
@@ -70,15 +69,4 @@ func IsMockMode(ctx context.Context) bool {
 	return ok && mockMode
 }
 
-// respondError writes a JSON error response
-func respondError(w http.ResponseWriter, status int, code, message string) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(map[string]interface{}{
-		"error": map[string]string{
-			"code":    code,
-			"message": message,
-		},
-	})
-}
 

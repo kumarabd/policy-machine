@@ -1,4 +1,4 @@
-package server
+package http
 
 import (
 	"encoding/json"
@@ -14,7 +14,7 @@ import (
 )
 
 // ListDenies returns paginated list of deny rules (prohibitions)
-func (h *BaseServer) ListDenies(w http.ResponseWriter, r *http.Request) {
+func (s *HTTP) ListDenies(w http.ResponseWriter, r *http.Request) {
 	if IsMockMode(r.Context()) {
 		mock.ListDenies(w, r)
 		return
@@ -49,7 +49,7 @@ func (h *BaseServer) ListDenies(w http.ResponseWriter, r *http.Request) {
 	}
 	cursor := r.URL.Query().Get("cursor")
 
-	_, results, nextCursor, hasMore, err := h.engine.GetDB().ListDenies(r.Context(), tenantID, filters, limit, cursor)
+	_, results, nextCursor, hasMore, err := s.engine.GetDB().ListDenies(r.Context(), tenantID, filters, limit, cursor)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return
@@ -90,7 +90,7 @@ func (h *BaseServer) ListDenies(w http.ResponseWriter, r *http.Request) {
 }
 
 // CreateDeny creates a new deny rule (prohibition)
-func (h *BaseServer) CreateDeny(w http.ResponseWriter, r *http.Request) {
+func (s *HTTP) CreateDeny(w http.ResponseWriter, r *http.Request) {
 	if IsMockMode(r.Context()) {
 		mock.CreateDeny(w, r)
 		return
@@ -126,7 +126,7 @@ func (h *BaseServer) CreateDeny(w http.ResponseWriter, r *http.Request) {
 	// For now, use first target (could support multiple later)
 	oaID := req.Targets[0].ID
 
-	prohID, revision, err := h.engine.GetDB().CreateDeny(r.Context(), tenantID, subjectType, req.Subject.ID, oaID, req.Operations)
+	prohID, revision, err := s.engine.GetDB().CreateDeny(r.Context(), tenantID, subjectType, req.Subject.ID, oaID, req.Operations)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return
@@ -149,7 +149,7 @@ func (h *BaseServer) CreateDeny(w http.ResponseWriter, r *http.Request) {
 }
 
 // GetDeny returns a deny rule by ID
-func (h *BaseServer) GetDeny(w http.ResponseWriter, r *http.Request) {
+func (s *HTTP) GetDeny(w http.ResponseWriter, r *http.Request) {
 	if IsMockMode(r.Context()) {
 		mock.GetDeny(w, r)
 		return
@@ -168,7 +168,7 @@ func (h *BaseServer) GetDeny(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	proh, ops, err := h.engine.GetDB().GetDeny(r.Context(), tenantID, id)
+	proh, ops, err := s.engine.GetDB().GetDeny(r.Context(), tenantID, id)
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
 			respondError(w, http.StatusNotFound, "NOT_FOUND", "Deny rule not found")
@@ -204,7 +204,7 @@ func (h *BaseServer) GetDeny(w http.ResponseWriter, r *http.Request) {
 }
 
 // UpdateDeny updates a deny rule
-func (h *BaseServer) UpdateDeny(w http.ResponseWriter, r *http.Request) {
+func (s *HTTP) UpdateDeny(w http.ResponseWriter, r *http.Request) {
 	if IsMockMode(r.Context()) {
 		mock.UpdateDeny(w, r)
 		return
@@ -231,7 +231,7 @@ func (h *BaseServer) UpdateDeny(w http.ResponseWriter, r *http.Request) {
 
 	ops := req.Operations
 	if len(ops) == 0 {
-		_, existingOps, _ := h.engine.GetDB().GetDeny(r.Context(), tenantID, id)
+		_, existingOps, _ := s.engine.GetDB().GetDeny(r.Context(), tenantID, id)
 		ops = existingOps
 	}
 
@@ -242,7 +242,7 @@ func (h *BaseServer) UpdateDeny(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	revision, err := h.engine.GetDB().UpdateDeny(r.Context(), tenantID, id, ops, oaIDs)
+	revision, err := s.engine.GetDB().UpdateDeny(r.Context(), tenantID, id, ops, oaIDs)
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
 			respondError(w, http.StatusNotFound, "NOT_FOUND", "Deny rule not found")
@@ -252,7 +252,7 @@ func (h *BaseServer) UpdateDeny(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	proh, ops, _ := h.engine.GetDB().GetDeny(r.Context(), tenantID, id)
+	proh, ops, _ := s.engine.GetDB().GetDeny(r.Context(), tenantID, id)
 
 	subjectType := "subject"
 	if proh.SubjectType == postgres.ProhibitUA {
@@ -283,7 +283,7 @@ func (h *BaseServer) UpdateDeny(w http.ResponseWriter, r *http.Request) {
 }
 
 // DeleteDeny deletes a deny rule
-func (h *BaseServer) DeleteDeny(w http.ResponseWriter, r *http.Request) {
+func (s *HTTP) DeleteDeny(w http.ResponseWriter, r *http.Request) {
 	if IsMockMode(r.Context()) {
 		mock.DeleteDeny(w, r)
 		return
@@ -302,7 +302,7 @@ func (h *BaseServer) DeleteDeny(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, err = h.engine.GetDB().DeleteDeny(r.Context(), tenantID, id)
+	_, err = s.engine.GetDB().DeleteDeny(r.Context(), tenantID, id)
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
 			respondError(w, http.StatusNotFound, "NOT_FOUND", "Deny rule not found")

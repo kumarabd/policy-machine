@@ -1,4 +1,4 @@
-package server
+package http
 
 import (
 	"encoding/json"
@@ -8,12 +8,12 @@ import (
 	"github.com/google/uuid"
 	"github.com/kumarabd/policy-machine/pkg/mock"
 	"github.com/kumarabd/policy-machine/pkg/postgres"
-	"github.com/kumarabd/policy-machine/pkg/postgres/validate"
+	"github.com/kumarabd/policy-machine/pkg/validate"
 	"gorm.io/gorm"
 )
 
 // ListRelationships returns paginated list of relationships
-func (h *BaseServer) ListRelationships(w http.ResponseWriter, r *http.Request) {
+func (s *HTTP) ListRelationships(w http.ResponseWriter, r *http.Request) {
 	if IsMockMode(r.Context()) {
 		mock.ListRelationships(w, r)
 		return
@@ -54,7 +54,7 @@ func (h *BaseServer) ListRelationships(w http.ResponseWriter, r *http.Request) {
 	}
 	cursor := r.URL.Query().Get("cursor")
 
-	edges, nextCursor, hasMore, err := h.engine.GetDB().ListRelationships(r.Context(), tenantID, filters, limit, cursor)
+	edges, nextCursor, hasMore, err := s.engine.GetDB().ListRelationships(r.Context(), tenantID, filters, limit, cursor)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return
@@ -83,7 +83,7 @@ func (h *BaseServer) ListRelationships(w http.ResponseWriter, r *http.Request) {
 }
 
 // CreateRelationship creates a new relationship
-func (h *BaseServer) CreateRelationship(w http.ResponseWriter, r *http.Request) {
+func (s *HTTP) CreateRelationship(w http.ResponseWriter, r *http.Request) {
 	if IsMockMode(r.Context()) {
 		mock.CreateRelationship(w, r)
 		return
@@ -115,10 +115,10 @@ func (h *BaseServer) CreateRelationship(w http.ResponseWriter, r *http.Request) 
 		ParentID:   req.To.ID,
 	}
 
-	revision, err := h.engine.GetDB().CreateRelationship(r.Context(), tenantID, edge)
+	revision, err := s.engine.GetDB().CreateRelationship(r.Context(), tenantID, edge)
 	if err != nil {
 		// Check for validation errors
-		if ve, ok := err.(*validate.ValidationError); ok {
+		if ve, ok := validate.IsValidationError(err); ok {
 			if ve.Code == "CYCLE_DETECTED" {
 				respondError(w, http.StatusConflict, "CYCLE_DETECTED", ve.Message)
 				return
@@ -146,7 +146,7 @@ func (h *BaseServer) CreateRelationship(w http.ResponseWriter, r *http.Request) 
 }
 
 // DeleteRelationship deletes a relationship
-func (h *BaseServer) DeleteRelationship(w http.ResponseWriter, r *http.Request) {
+func (s *HTTP) DeleteRelationship(w http.ResponseWriter, r *http.Request) {
 	if IsMockMode(r.Context()) {
 		mock.DeleteRelationship(w, r)
 		return
@@ -177,7 +177,7 @@ func (h *BaseServer) DeleteRelationship(w http.ResponseWriter, r *http.Request) 
 		ParentID:   req.To.ID,
 	}
 
-	revision, err := h.engine.GetDB().DeleteRelationship(r.Context(), tenantID, edge)
+	revision, err := s.engine.GetDB().DeleteRelationship(r.Context(), tenantID, edge)
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
 			respondError(w, http.StatusNotFound, "NOT_FOUND", "Relationship not found")
@@ -231,4 +231,3 @@ func InferRelationshipKind(childType, parentType postgres.NodeType) string {
 	}
 	return "unknown"
 }
-

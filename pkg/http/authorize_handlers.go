@@ -1,4 +1,4 @@
-package server
+package http
 
 import (
 	"encoding/json"
@@ -21,7 +21,7 @@ import (
 // @Param request body AuthorizeRequest true "Authorization request"
 // @Success 200 {object} AuthorizeResponse
 // @Router /api/v1/authorize [post]
-func (h *BaseServer) Authorize(w http.ResponseWriter, r *http.Request) {
+func (s *HTTP) Authorize(w http.ResponseWriter, r *http.Request) {
 	if IsMockMode(r.Context()) {
 		mock.Authorize(w, r)
 		return
@@ -39,14 +39,14 @@ func (h *BaseServer) Authorize(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	allowed, err := h.engine.Decide(r.Context(), req.UserID, req.ObjectID, req.Operation)
+	allowed, err := s.engine.Decide(r.Context(), req.UserID, req.ObjectID, req.Operation)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "DECISION_ERROR", err.Error())
 		return
 	}
 
 	// Get current revision
-	rev, _ := h.engine.GetDB().GetCurrentRevision(r.Context(), tenantID)
+	rev, _ := s.engine.GetDB().GetCurrentRevision(r.Context(), tenantID)
 
 	response := AuthorizeResponse{
 		Allowed:  allowed,
@@ -58,7 +58,7 @@ func (h *BaseServer) Authorize(w http.ResponseWriter, r *http.Request) {
 }
 
 // AuthorizeExplain provides detailed explanation of authorization decision
-func (h *BaseServer) AuthorizeExplain(w http.ResponseWriter, r *http.Request) {
+func (s *HTTP) AuthorizeExplain(w http.ResponseWriter, r *http.Request) {
 	if IsMockMode(r.Context()) {
 		mock.AuthorizeExplain(w, r)
 		return
@@ -77,19 +77,19 @@ func (h *BaseServer) AuthorizeExplain(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get snapshot
-	snap := h.engine.Snapshot()
+	snap := s.engine.Snapshot()
 	if snap == nil {
 		respondError(w, http.StatusInternalServerError, "NO_SNAPSHOT", "Engine snapshot not available")
 		return
 	}
 
 	// Compute closures (reuse engine logic)
-	uaClosure := h.engine.UserUAClosure(snap, req.UserID)
-	oaClosure := h.engine.ObjectOAClosure(snap, req.ObjectID)
+	uaClosure := s.engine.UserUAClosure(snap, req.UserID)
+	oaClosure := s.engine.ObjectOAClosure(snap, req.ObjectID)
 
 	// Get allow/deny sets
-	allowSet := h.engine.AllowedFor(snap, req.UserID, req.Operation, uaClosure)
-	denySet := h.engine.DeniedFor(snap, req.UserID, req.Operation, uaClosure)
+	allowSet := s.engine.AllowedFor(snap, req.UserID, req.Operation, uaClosure)
+	denySet := s.engine.DeniedFor(snap, req.UserID, req.Operation, uaClosure)
 
 	// Convert bitmaps to UUID lists
 	subjectClosure := bitmapToUUIDs(uaClosure, snap.UAByIdx())
@@ -105,7 +105,7 @@ func (h *BaseServer) AuthorizeExplain(w http.ResponseWriter, r *http.Request) {
 	effectiveDeny := roaring.And(denySet, oaClosure)
 	allowed := effectiveAllow.GetCardinality() > 0 && effectiveDeny.GetCardinality() == 0
 
-	rev, _ := h.engine.GetDB().GetCurrentRevision(r.Context(), tenantID)
+	rev, _ := s.engine.GetDB().GetCurrentRevision(r.Context(), tenantID)
 
 	response := ExplainResponse{
 		Allowed:  allowed,
@@ -131,7 +131,7 @@ func (h *BaseServer) AuthorizeExplain(w http.ResponseWriter, r *http.Request) {
 // @Param request body EvaluateRequest true "Evaluation request"
 // @Success 200 {object} EvaluateResponse
 // @Router /api/v1/evaluate [post]
-func (h *BaseServer) Evaluate(w http.ResponseWriter, r *http.Request) {
+func (s *HTTP) Evaluate(w http.ResponseWriter, r *http.Request) {
 	if IsMockMode(r.Context()) {
 		mock.Evaluate(w, r)
 		return
@@ -163,25 +163,25 @@ func (h *BaseServer) Evaluate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get current revision
-	rev, _ := h.engine.GetDB().GetCurrentRevision(r.Context(), tenantID)
+	rev, _ := s.engine.GetDB().GetCurrentRevision(r.Context(), tenantID)
 	versionID := strconv.FormatInt(rev, 10)
 
 	// If explain is requested, use AuthorizeExplain logic
 	if req.Explain {
 		// Get snapshot
-		snap := h.engine.Snapshot()
+		snap := s.engine.Snapshot()
 		if snap == nil {
 			respondError(w, http.StatusInternalServerError, "NO_SNAPSHOT", "Engine snapshot not available")
 			return
 		}
 
 		// Compute closures
-		uaClosure := h.engine.UserUAClosure(snap, subjectID)
-		oaClosure := h.engine.ObjectOAClosure(snap, objectID)
+		uaClosure := s.engine.UserUAClosure(snap, subjectID)
+		oaClosure := s.engine.ObjectOAClosure(snap, objectID)
 
 		// Get allow/deny sets
-		allowSet := h.engine.AllowedFor(snap, subjectID, req.Action, uaClosure)
-		denySet := h.engine.DeniedFor(snap, subjectID, req.Action, uaClosure)
+		allowSet := s.engine.AllowedFor(snap, subjectID, req.Action, uaClosure)
+		denySet := s.engine.DeniedFor(snap, subjectID, req.Action, uaClosure)
 
 		// For allow/deny hits, we'd need to track which associations/prohibitions matched
 		allowHits := []uuid.UUID{}
@@ -219,7 +219,7 @@ func (h *BaseServer) Evaluate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Simple authorization check
-	allowed, err := h.engine.Decide(r.Context(), subjectID, objectID, req.Action)
+	allowed, err := s.engine.Decide(r.Context(), subjectID, objectID, req.Action)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "DECISION_ERROR", err.Error())
 		return
@@ -255,4 +255,3 @@ func bitmapToUUIDs(bmp *roaring.Bitmap, idArray []uuid.UUID) []uuid.UUID {
 	}
 	return result
 }
-

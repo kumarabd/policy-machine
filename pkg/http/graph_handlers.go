@@ -1,4 +1,4 @@
-package server
+package http
 
 import (
 	"encoding/json"
@@ -11,7 +11,7 @@ import (
 )
 
 // GetGraphSummary returns counts of all entities
-func (h *BaseServer) GetGraphSummary(w http.ResponseWriter, r *http.Request) {
+func (s *HTTP) GetGraphSummary(w http.ResponseWriter, r *http.Request) {
 	if IsMockMode(r.Context()) {
 		mock.GetGraphSummary(w, r)
 		return
@@ -23,7 +23,7 @@ func (h *BaseServer) GetGraphSummary(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	summary, err := h.engine.GetDB().GetGraphSummary(r.Context(), tenantID)
+	summary, err := s.engine.GetDB().GetGraphSummary(r.Context(), tenantID)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return
@@ -32,8 +32,8 @@ func (h *BaseServer) GetGraphSummary(w http.ResponseWriter, r *http.Request) {
 	response := GraphSummaryResponse{
 		Subjects:      int(summary["subjects"]),
 		Objects:       int(summary["objects"]),
-		SubjectSets: int(summary["subject_sets"]),
-		ObjectSets:  int(summary["object_sets"]),
+		SubjectSets:   int(summary["subject_sets"]),
+		ObjectSets:    int(summary["object_sets"]),
 		Relationships: int(summary["relationships"]),
 		Rules:         int(summary["rules"]),
 		Denies:        int(summary["denies"]),
@@ -45,7 +45,7 @@ func (h *BaseServer) GetGraphSummary(w http.ResponseWriter, r *http.Request) {
 
 // GetGraphNeighborhood returns nodes and edges around a given node
 // Supports both GET (query params) and POST (request body) for UI compatibility
-func (h *BaseServer) GetGraphNeighborhood(w http.ResponseWriter, r *http.Request) {
+func (s *HTTP) GetGraphNeighborhood(w http.ResponseWriter, r *http.Request) {
 	if IsMockMode(r.Context()) {
 		mock.GetGraphNeighborhood(w, r)
 		return
@@ -119,7 +119,7 @@ func (h *BaseServer) GetGraphNeighborhood(w http.ResponseWriter, r *http.Request
 }
 
 // GraphSearch searches for nodes by query
-func (h *BaseServer) GraphSearch(w http.ResponseWriter, r *http.Request) {
+func (s *HTTP) GraphSearch(w http.ResponseWriter, r *http.Request) {
 	if IsMockMode(r.Context()) {
 		mock.GraphSearch(w, r)
 		return
@@ -145,7 +145,7 @@ func (h *BaseServer) GraphSearch(w http.ResponseWriter, r *http.Request) {
 		types = strings.Split(typesStr, ",")
 	}
 
-	results, err := h.engine.GetDB().GraphSearch(r.Context(), tenantID, query, types, limit)
+	results, err := s.engine.GetDB().GraphSearch(r.Context(), tenantID, query, types, limit)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return
@@ -167,4 +167,3 @@ func (h *BaseServer) GraphSearch(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response)
 }
-

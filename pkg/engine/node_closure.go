@@ -10,7 +10,7 @@ var ErrTraversalLimitExceeded = errors.New("traversal limit exceeded: graph too 
 
 // Returns closure of a UA node: itself + all ancestors via uaParents.
 func (e *Engine) uaNodeAllParents(s *Snapshot, ua uint32) *roaring.Bitmap {
-	if b, ok := e.uaNodeClosure.Get(ua); ok {
+	if b, ok := e.caches.UANodeClosure.Get(ua); ok {
 		return b
 	}
 
@@ -31,12 +31,12 @@ func (e *Engine) uaNodeAllParents(s *Snapshot, ua uint32) *roaring.Bitmap {
 		}
 	}
 
-	e.uaNodeClosure.Put(ua, out)
+	e.caches.UANodeClosure.Put(ua, out)
 	return out
 }
 
 func (e *Engine) oaNodeAllParents(s *Snapshot, oa uint32) *roaring.Bitmap {
-	if b, ok := e.oaNodeClosure.Get(oa); ok {
+	if b, ok := e.caches.OANodeClosure.Get(oa); ok {
 		return b
 	}
 
@@ -57,6 +57,6 @@ func (e *Engine) oaNodeAllParents(s *Snapshot, oa uint32) *roaring.Bitmap {
 		}
 	}
 
-	e.oaNodeClosure.Put(oa, out)
+	e.caches.OANodeClosure.Put(oa, out)
 	return out
 }

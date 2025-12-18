@@ -1,4 +1,4 @@
-package server
+package http
 
 import (
 	"encoding/json"
@@ -15,7 +15,7 @@ import (
 // @Produce json
 // @Success 200 {object} api.SearchResponse[api.PolicyScope]
 // @Router /api/v1/scopes [get]
-func (h *BaseServer) ListScopes(w http.ResponseWriter, r *http.Request) {
+func (s *HTTP) ListScopes(w http.ResponseWriter, r *http.Request) {
 	if IsMockMode(r.Context()) {
 		mock.ListScopes(w, r)
 		return
@@ -39,4 +39,3 @@ func (h *BaseServer) ListScopes(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response)
 }
-

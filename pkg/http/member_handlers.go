@@ -1,4 +1,4 @@
-package server
+package http
 
 import (
 	"encoding/json"
@@ -21,7 +21,7 @@ import (
 // @Param request body AddMembersRequest true "Member IDs"
 // @Success 200 {object} api.SubjectSet
 // @Router /api/v1/subject-sets/{id}/members:add [post]
-func (h *BaseServer) AddSubjectSetMembers(w http.ResponseWriter, r *http.Request) {
+func (s *HTTP) AddSubjectSetMembers(w http.ResponseWriter, r *http.Request) {
 	if IsMockMode(r.Context()) {
 		mock.AddSubjectSetMembers(w, r)
 		return
@@ -65,7 +65,7 @@ func (h *BaseServer) AddSubjectSetMembers(w http.ResponseWriter, r *http.Request
 			ParentType: postgres.NodeUA,
 			ParentID:   setID,
 		}
-		_, err := h.engine.GetDB().CreateRelationship(r.Context(), tenantID, edge)
+		_, err := s.engine.GetDB().CreateRelationship(r.Context(), tenantID, edge)
 		if err != nil {
 			respondError(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 			return
@@ -73,13 +73,13 @@ func (h *BaseServer) AddSubjectSetMembers(w http.ResponseWriter, r *http.Request
 	}
 
 	// Refresh engine
-	if err := h.engine.Refresh(r.Context()); err != nil {
+	if err := s.engine.Refresh(r.Context()); err != nil {
 		respondError(w, http.StatusInternalServerError, "REFRESH_ERROR", err.Error())
 		return
 	}
 
 	// Fetch updated subject set
-	ua, err := h.engine.GetDB().GetSubjectGroup(r.Context(), tenantID, setID)
+	ua, err := s.engine.GetDB().GetSubjectGroup(r.Context(), tenantID, setID)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return
@@ -88,15 +88,15 @@ func (h *BaseServer) AddSubjectSetMembers(w http.ResponseWriter, r *http.Request
 	// Get member IDs (would need to query assignment edges)
 	memberIDs := []uuid.UUID{} // TODO: Query actual members
 
-	response := api.SubjectGroup{
-		ID:              ua.ID,
-		Name:            ua.Name,
-		Description:     "", // TODO: Get from DB if available
-		ScopeID:         nil,
-		Tags:            []string{},
+	response := api.SubjectSet{
+		ID:               ua.ID,
+		Name:             ua.Name,
+		Description:      "", // TODO: Get from DB if available
+		ScopeID:          nil,
+		Tags:             []string{},
 		MemberSubjectIDs: memberIDs,
-		CreatedAt:       ua.CreatedAt,
-		UpdatedAt:       &ua.UpdatedAt,
+		CreatedAt:        ua.CreatedAt,
+		UpdatedAt:        &ua.UpdatedAt,
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -113,7 +113,7 @@ func (h *BaseServer) AddSubjectSetMembers(w http.ResponseWriter, r *http.Request
 // @Param request body RemoveMemberRequest true "Member ID"
 // @Success 200 {object} api.SubjectSet
 // @Router /api/v1/subject-sets/{id}/members:remove [post]
-func (h *BaseServer) RemoveSubjectSetMember(w http.ResponseWriter, r *http.Request) {
+func (s *HTTP) RemoveSubjectSetMember(w http.ResponseWriter, r *http.Request) {
 	if IsMockMode(r.Context()) {
 		mock.RemoveSubjectSetMember(w, r)
 		return
@@ -151,20 +151,20 @@ func (h *BaseServer) RemoveSubjectSetMember(w http.ResponseWriter, r *http.Reque
 		ParentType: postgres.NodeUA,
 		ParentID:   setID,
 	}
-	_, err = h.engine.GetDB().DeleteRelationship(r.Context(), tenantID, edge)
+	_, err = s.engine.GetDB().DeleteRelationship(r.Context(), tenantID, edge)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return
 	}
 
 	// Refresh engine
-	if err := h.engine.Refresh(r.Context()); err != nil {
+	if err := s.engine.Refresh(r.Context()); err != nil {
 		respondError(w, http.StatusInternalServerError, "REFRESH_ERROR", err.Error())
 		return
 	}
 
 	// Fetch updated subject set
-	ua, err := h.engine.GetDB().GetSubjectGroup(r.Context(), tenantID, setID)
+	ua, err := s.engine.GetDB().GetSubjectGroup(r.Context(), tenantID, setID)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return
@@ -172,15 +172,15 @@ func (h *BaseServer) RemoveSubjectSetMember(w http.ResponseWriter, r *http.Reque
 
 	memberIDs := []uuid.UUID{} // TODO: Query actual members
 
-	response := api.SubjectGroup{
-		ID:              ua.ID,
-		Name:            ua.Name,
-		Description:     "",
-		ScopeID:         nil,
-		Tags:            []string{},
+	response := api.SubjectSet{
+		ID:               ua.ID,
+		Name:             ua.Name,
+		Description:      "",
+		ScopeID:          nil,
+		Tags:             []string{},
 		MemberSubjectIDs: memberIDs,
-		CreatedAt:       ua.CreatedAt,
-		UpdatedAt:       &ua.UpdatedAt,
+		CreatedAt:        ua.CreatedAt,
+		UpdatedAt:        &ua.UpdatedAt,
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -197,7 +197,7 @@ func (h *BaseServer) RemoveSubjectSetMember(w http.ResponseWriter, r *http.Reque
 // @Param request body AddObjectMembersRequest true "Member IDs"
 // @Success 200 {object} api.ObjectSet
 // @Router /api/v1/object-sets/{id}/members:add [post]
-func (h *BaseServer) AddObjectSetMembers(w http.ResponseWriter, r *http.Request) {
+func (s *HTTP) AddObjectSetMembers(w http.ResponseWriter, r *http.Request) {
 	if IsMockMode(r.Context()) {
 		mock.AddObjectSetMembers(w, r)
 		return
@@ -241,7 +241,7 @@ func (h *BaseServer) AddObjectSetMembers(w http.ResponseWriter, r *http.Request)
 			ParentType: postgres.NodeOA,
 			ParentID:   setID,
 		}
-		_, err := h.engine.GetDB().CreateRelationship(r.Context(), tenantID, edge)
+		_, err := s.engine.GetDB().CreateRelationship(r.Context(), tenantID, edge)
 		if err != nil {
 			respondError(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 			return
@@ -249,13 +249,13 @@ func (h *BaseServer) AddObjectSetMembers(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Refresh engine
-	if err := h.engine.Refresh(r.Context()); err != nil {
+	if err := s.engine.Refresh(r.Context()); err != nil {
 		respondError(w, http.StatusInternalServerError, "REFRESH_ERROR", err.Error())
 		return
 	}
 
 	// Fetch updated object set
-	oa, err := h.engine.GetDB().GetObjectGroup(r.Context(), tenantID, setID)
+	oa, err := s.engine.GetDB().GetObjectGroup(r.Context(), tenantID, setID)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return
@@ -263,15 +263,15 @@ func (h *BaseServer) AddObjectSetMembers(w http.ResponseWriter, r *http.Request)
 
 	memberIDs := []uuid.UUID{} // TODO: Query actual members
 
-	response := api.ObjectGroup{
-		ID:             oa.ID,
-		Name:           oa.Name,
-		Description:    "",
-		ScopeID:        nil,
-		Tags:           []string{},
+	response := api.ObjectSet{
+		ID:              oa.ID,
+		Name:            oa.Name,
+		Description:     "",
+		ScopeID:         nil,
+		Tags:            []string{},
 		MemberObjectIDs: memberIDs,
-		CreatedAt:      oa.CreatedAt,
-		UpdatedAt:      &oa.UpdatedAt,
+		CreatedAt:       oa.CreatedAt,
+		UpdatedAt:       &oa.UpdatedAt,
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -288,7 +288,7 @@ func (h *BaseServer) AddObjectSetMembers(w http.ResponseWriter, r *http.Request)
 // @Param request body RemoveObjectMemberRequest true "Member ID"
 // @Success 200 {object} api.ObjectSet
 // @Router /api/v1/object-sets/{id}/members:remove [post]
-func (h *BaseServer) RemoveObjectSetMember(w http.ResponseWriter, r *http.Request) {
+func (s *HTTP) RemoveObjectSetMember(w http.ResponseWriter, r *http.Request) {
 	if IsMockMode(r.Context()) {
 		mock.RemoveObjectSetMember(w, r)
 		return
@@ -326,20 +326,20 @@ func (h *BaseServer) RemoveObjectSetMember(w http.ResponseWriter, r *http.Reques
 		ParentType: postgres.NodeOA,
 		ParentID:   setID,
 	}
-	_, err = h.engine.GetDB().DeleteRelationship(r.Context(), tenantID, edge)
+	_, err = s.engine.GetDB().DeleteRelationship(r.Context(), tenantID, edge)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return
 	}
 
 	// Refresh engine
-	if err := h.engine.Refresh(r.Context()); err != nil {
+	if err := s.engine.Refresh(r.Context()); err != nil {
 		respondError(w, http.StatusInternalServerError, "REFRESH_ERROR", err.Error())
 		return
 	}
 
 	// Fetch updated object set
-	oa, err := h.engine.GetDB().GetObjectGroup(r.Context(), tenantID, setID)
+	oa, err := s.engine.GetDB().GetObjectGroup(r.Context(), tenantID, setID)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return
@@ -347,15 +347,15 @@ func (h *BaseServer) RemoveObjectSetMember(w http.ResponseWriter, r *http.Reques
 
 	memberIDs := []uuid.UUID{} // TODO: Query actual members
 
-	response := api.ObjectGroup{
-		ID:             oa.ID,
-		Name:           oa.Name,
-		Description:    "",
-		ScopeID:        nil,
-		Tags:           []string{},
+	response := api.ObjectSet{
+		ID:              oa.ID,
+		Name:            oa.Name,
+		Description:     "",
+		ScopeID:         nil,
+		Tags:            []string{},
 		MemberObjectIDs: memberIDs,
-		CreatedAt:      oa.CreatedAt,
-		UpdatedAt:      &oa.UpdatedAt,
+		CreatedAt:       oa.CreatedAt,
+		UpdatedAt:       &oa.UpdatedAt,
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -378,4 +378,3 @@ type AddObjectMembersRequest struct {
 type RemoveObjectMemberRequest struct {
 	ObjectID string `json:"objectId"`
 }
-

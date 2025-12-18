@@ -5,6 +5,25 @@ server:
     port: 8500
 engine:
   tenant_id: "00000000-0000-0000-0000-000000000001"  # Default tenant UUID (required)
+  max_traversal_nodes: 100000  # Maximum nodes to traverse in BFS operations (default: 100000)
+  cache_ttl: 2m  # Default TTL for most caches (default: 2 minutes, format: Go duration string)
+  mock_mode: false  # Enable mock mode for API responses
+  limits:
+    # Cache capacity limits (zero = use defaults)
+    # UA/OA closure caches: default 50,000 entries
+    ua_closure_max_entries: 0  # Max entries in user->UA closure cache (default: 50k)
+    oa_closure_max_entries: 0  # Max entries in object->OA closure cache (default: 50k)
+    # Node closure caches: default 200,000 entries
+    ua_node_closure_max_entries: 0  # Max entries in UA node closure cache (default: 200k)
+    oa_node_closure_max_entries: 0  # Max entries in OA node closure cache (default: 200k)
+    oa_desc_closure_max_entries: 0  # Max entries in OA descendants closure cache (default: 200k)
+    # Allow/Deny caches: default 10,000 users, 100,000 (user,op) entries
+    allow_cache_max_users: 0  # Max number of user keys in allow cache (default: 10k)
+    allow_cache_max_entries: 0  # Max total (user,op) pairs in allow cache (default: 100k)
+    deny_cache_max_users: 0  # Max number of user keys in deny cache (default: 10k)
+    deny_cache_max_entries: 0  # Max total (user,op) pairs in deny cache (default: 100k)
+    # Decision cache: default 500,000 entries
+    decision_cache_max_entries: 0  # Max total decision keys (default: 500k)
 postgres:
   endpoint: 
     username: policy

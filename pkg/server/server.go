@@ -1,27 +1,52 @@
 package server
 
 import (
-	"fmt"
-	"net/http"
 	"strings"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/kumarabd/gokit/logger"
-
-	// "github.com/kumarabd/policy-machine/docs"
 	"github.com/kumarabd/policy-machine/internal/metrics"
 	"github.com/kumarabd/policy-machine/pkg/engine"
+	"github.com/kumarabd/policy-machine/pkg/http"
 )
 
+// Server defines the interface for any server implementation (HTTP, gRPC, etc.)
+type Server interface {
+	Start(ch chan struct{}) error
+	Stop() error
+}
+
+// BaseServerConfig holds base server configuration (port, etc.)
+type BaseServerConfig struct {
+	Port int64 `json:"port" yaml:"port"`
+}
+
+// Config holds server configuration
 type Config struct {
 	Name string            `json:"name" yaml:"name"`
 	Base *BaseServerConfig `json:"base" yaml:"base"`
 }
 
-type Handler struct {
-	BaseServer *BaseServer
-	config     *Config
-	log        *logger.Handler
+// New creates a new server instance based on configuration
+// Currently returns HTTP server, but can be extended to support other protocols
+func New(l *logger.Handler, m *metrics.Handler, config *Config, eng *engine.Engine) (Server, error) {
+	// For now, always return HTTP server
+	// In the future, this could check config to return HTTP, gRPC, or other implementations
+	return newHTTPServer(l, m, config, eng)
+}
+
+// newHTTPServer creates an HTTP server instance
+// This is a private function - external code should use New() which returns the Server interface
+func newHTTPServer(l *logger.Handler, m *metrics.Handler, config *Config, eng *engine.Engine) (Server, error) {
+	// Convert server.Config to http.Config
+	httpConfig := &http.Config{
+		Port: 8500, // Default port
+	}
+	if config.Base != nil {
+		httpConfig.Port = config.Base.Port
+	}
+
+	// Directly create HTTP server using dependency injection
+	return http.New(l, m, httpConfig, eng)
 }
 
 // formatTitle converts "abc-def" format to "Abc Def" format
@@ -34,55 +59,4 @@ func formatTitle(name string) string {
 		}
 	}
 	return strings.Join(parts, " ")
-}
-
-func New(l *logger.Handler, m *metrics.Handler, config *Config, eng *engine.Engine) (*Handler, error) {
-	// Ensure Base config is initialized
-	if config.Base == nil {
-		config.Base = &BaseServerConfig{
-			Port: 8500, // Default port
-		}
-	}
-
-	// Initiate Base Server object
-	httpObj := &BaseServer{
-		log:    l,
-		engine: eng,
-		metric: m,
-	}
-	httpObj.handler = chi.NewRouter()
-	// Register all routes (get tenant ID from engine config)
-	defaultTenantID := eng.GetTenantID()
-	httpObj.RegisterRoutes(defaultTenantID)
-
-	return &Handler{
-		BaseServer: httpObj,
-		config:     config,
-		log:        l,
-	}, nil
-}
-
-func (h *Handler) Start(ch chan struct{}) {
-	// Start the Base server
-	go func() {
-		h.log.Info().Msgf("started http server on port: %d", h.config.Base.Port)
-		err := http.ListenAndServe(fmt.Sprintf("0.0.0.0:%d", h.config.Base.Port), h.BaseServer.handler)
-		h.log.Error().Err(err).Msg("server stopped")
-		ch <- struct{}{}
-	}()
-
-	//// Start the GRPC server
-	//go func() {
-	//	listener, err := net.Listen("tcp", fmt.Sprintf("0.0.0.0:%s", h.config.GRPC.Port))
-	//	if err != nil {
-	//		h.log.Error().Err(err).Msg("server stopped")
-	//	}
-
-	//	h.log.Info().Msgf("started grpc server on port: %s", h.config.GRPC.Port)
-	//	err = h.GRPCServer.handler.Serve(listener)
-	//	if err != nil {
-	//		h.log.Error().Err(err).Msg("server stopped")
-	//	}
-	//	ch <- struct{}{}
-	//}()
 }

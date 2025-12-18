@@ -1,4 +1,4 @@
-package server
+package http
 
 import (
 	"encoding/json"
@@ -14,7 +14,7 @@ import (
 )
 
 // ListObjects returns paginated list of objects
-func (h *BaseServer) ListObjects(w http.ResponseWriter, r *http.Request) {
+func (s *HTTP) ListObjects(w http.ResponseWriter, r *http.Request) {
 	if IsMockMode(r.Context()) {
 		mock.ListObjects(w, r)
 		return
@@ -35,7 +35,7 @@ func (h *BaseServer) ListObjects(w http.ResponseWriter, r *http.Request) {
 	}
 	cursor := r.URL.Query().Get("cursor")
 
-	objects, nextCursor, hasMore, err := h.engine.GetDB().ListObjects(r.Context(), tenantID, query, limit, cursor)
+	objects, nextCursor, hasMore, err := s.engine.GetDB().ListObjects(r.Context(), tenantID, query, limit, cursor)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return
@@ -76,7 +76,7 @@ func (h *BaseServer) ListObjects(w http.ResponseWriter, r *http.Request) {
 }
 
 // CreateObject creates a new object
-func (h *BaseServer) CreateObject(w http.ResponseWriter, r *http.Request) {
+func (s *HTTP) CreateObject(w http.ResponseWriter, r *http.Request) {
 	if IsMockMode(r.Context()) {
 		mock.CreateObject(w, r)
 		return
@@ -104,7 +104,7 @@ func (h *BaseServer) CreateObject(w http.ResponseWriter, r *http.Request) {
 		Type:       req.Type,
 	}
 
-	revision, err := h.engine.GetDB().CreateObject(r.Context(), tenantID, obj)
+	revision, err := s.engine.GetDB().CreateObject(r.Context(), tenantID, obj)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return
@@ -134,7 +134,7 @@ func (h *BaseServer) CreateObject(w http.ResponseWriter, r *http.Request) {
 }
 
 // GetObject returns an object by ID
-func (h *BaseServer) GetObject(w http.ResponseWriter, r *http.Request) {
+func (s *HTTP) GetObject(w http.ResponseWriter, r *http.Request) {
 	if IsMockMode(r.Context()) {
 		mock.GetObject(w, r)
 		return
@@ -153,7 +153,7 @@ func (h *BaseServer) GetObject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	obj, err := h.engine.GetDB().GetObject(r.Context(), tenantID, id)
+	obj, err := s.engine.GetDB().GetObject(r.Context(), tenantID, id)
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
 			respondError(w, http.StatusNotFound, "NOT_FOUND", "Object not found")
@@ -183,7 +183,7 @@ func (h *BaseServer) GetObject(w http.ResponseWriter, r *http.Request) {
 }
 
 // UpdateObject updates an object
-func (h *BaseServer) UpdateObject(w http.ResponseWriter, r *http.Request) {
+func (s *HTTP) UpdateObject(w http.ResponseWriter, r *http.Request) {
 	if IsMockMode(r.Context()) {
 		mock.UpdateObject(w, r)
 		return
@@ -218,7 +218,7 @@ func (h *BaseServer) UpdateObject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	revision, err := h.engine.GetDB().UpdateObject(r.Context(), tenantID, id, updates)
+	revision, err := s.engine.GetDB().UpdateObject(r.Context(), tenantID, id, updates)
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
 			respondError(w, http.StatusNotFound, "NOT_FOUND", "Object not found")
@@ -228,7 +228,7 @@ func (h *BaseServer) UpdateObject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	obj, _ := h.engine.GetDB().GetObject(r.Context(), tenantID, id)
+	obj, _ := s.engine.GetDB().GetObject(r.Context(), tenantID, id)
 
 	displayName := obj.ExternalID
 	if obj.Type != "" {
@@ -253,7 +253,7 @@ func (h *BaseServer) UpdateObject(w http.ResponseWriter, r *http.Request) {
 }
 
 // DeleteObject deletes an object
-func (h *BaseServer) DeleteObject(w http.ResponseWriter, r *http.Request) {
+func (s *HTTP) DeleteObject(w http.ResponseWriter, r *http.Request) {
 	if IsMockMode(r.Context()) {
 		mock.DeleteObject(w, r)
 		return
@@ -272,7 +272,7 @@ func (h *BaseServer) DeleteObject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, err = h.engine.GetDB().DeleteObject(r.Context(), tenantID, id)
+	_, err = s.engine.GetDB().DeleteObject(r.Context(), tenantID, id)
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
 			respondError(w, http.StatusNotFound, "NOT_FOUND", "Object not found")
@@ -285,8 +285,8 @@ func (h *BaseServer) DeleteObject(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// ListObjectGroups returns paginated list of object groups
-func (h *BaseServer) ListObjectGroups(w http.ResponseWriter, r *http.Request) {
+// ListObjectGroups returns paginated list of object sets
+func (s *HTTP) ListObjectGroups(w http.ResponseWriter, r *http.Request) {
 	if IsMockMode(r.Context()) {
 		mock.ListObjectGroups(w, r)
 		return
@@ -307,23 +307,23 @@ func (h *BaseServer) ListObjectGroups(w http.ResponseWriter, r *http.Request) {
 	}
 	cursor := r.URL.Query().Get("cursor")
 
-	oas, nextCursor, hasMore, err := h.engine.GetDB().ListObjectGroups(r.Context(), tenantID, query, limit, cursor)
+	oas, nextCursor, hasMore, err := s.engine.GetDB().ListObjectGroups(r.Context(), tenantID, query, limit, cursor)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return
 	}
 
-	groups := make([]api.ObjectGroup, len(oas))
+	groups := make([]api.ObjectSet, len(oas))
 	for i, oa := range oas {
-		groups[i] = api.ObjectGroup{
-			ID:            oa.ID,
-			Name:          oa.Name,
-			Description:   "",
-			ScopeID:       nil,
-			Tags:          []string{},
+		groups[i] = api.ObjectSet{
+			ID:              oa.ID,
+			Name:            oa.Name,
+			Description:     "",
+			ScopeID:         nil,
+			Tags:            []string{},
 			MemberObjectIDs: []uuid.UUID{}, // TODO: Populate from relationships
-			CreatedAt:     oa.CreatedAt,
-			UpdatedAt:     nil,
+			CreatedAt:       oa.CreatedAt,
+			UpdatedAt:       nil,
 		}
 	}
 
@@ -333,7 +333,7 @@ func (h *BaseServer) ListObjectGroups(w http.ResponseWriter, r *http.Request) {
 	}
 	total := len(groups)
 
-	response := api.SearchResponse[api.ObjectGroup]{
+	response := api.SearchResponse[api.ObjectSet]{
 		Items:      groups,
 		NextCursor: nextCursorPtr,
 		Total:      &total,
@@ -343,8 +343,8 @@ func (h *BaseServer) ListObjectGroups(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(response)
 }
 
-// CreateObjectGroup creates a new object group
-func (h *BaseServer) CreateObjectGroup(w http.ResponseWriter, r *http.Request) {
+// CreateObjectGroup creates a new object set
+func (s *HTTP) CreateObjectGroup(w http.ResponseWriter, r *http.Request) {
 	if IsMockMode(r.Context()) {
 		mock.CreateObjectGroup(w, r)
 		return
@@ -356,7 +356,7 @@ func (h *BaseServer) CreateObjectGroup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var req CreateObjectGroupRequest
+	var req CreateObjectSetRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		respondError(w, http.StatusBadRequest, "INVALID_REQUEST", err.Error())
 		return
@@ -371,14 +371,14 @@ func (h *BaseServer) CreateObjectGroup(w http.ResponseWriter, r *http.Request) {
 		Name: req.Name,
 	}
 
-	revision, err := h.engine.GetDB().CreateObjectGroup(r.Context(), tenantID, oa)
+	revision, err := s.engine.GetDB().CreateObjectGroup(r.Context(), tenantID, oa)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return
 	}
 
-	response := ObjectGroupResponse{
-		Group: ObjectGroup{
+	response := ObjectSetResponse{
+		Group: api.ObjectSet{
 			ID:        oa.ID,
 			Name:      oa.Name,
 			CreatedAt: oa.CreatedAt,
@@ -391,8 +391,8 @@ func (h *BaseServer) CreateObjectGroup(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(response)
 }
 
-// GetObjectGroup returns an object group by ID
-func (h *BaseServer) GetObjectGroup(w http.ResponseWriter, r *http.Request) {
+// GetObjectGroup returns an object set by ID
+func (s *HTTP) GetObjectGroup(w http.ResponseWriter, r *http.Request) {
 	if IsMockMode(r.Context()) {
 		mock.GetObjectGroup(w, r)
 		return
@@ -411,17 +411,17 @@ func (h *BaseServer) GetObjectGroup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	oa, err := h.engine.GetDB().GetObjectGroup(r.Context(), tenantID, id)
+	oa, err := s.engine.GetDB().GetObjectGroup(r.Context(), tenantID, id)
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
-			respondError(w, http.StatusNotFound, "NOT_FOUND", "Object group not found")
+			respondError(w, http.StatusNotFound, "NOT_FOUND", "object set not found")
 			return
 		}
 		respondError(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return
 	}
 
-	group := ObjectGroup{
+	group := api.ObjectSet{
 		ID:        oa.ID,
 		Name:      oa.Name,
 		CreatedAt: oa.CreatedAt,
@@ -431,8 +431,8 @@ func (h *BaseServer) GetObjectGroup(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(group)
 }
 
-// UpdateObjectGroup updates an object group
-func (h *BaseServer) UpdateObjectGroup(w http.ResponseWriter, r *http.Request) {
+// UpdateObjectGroup updates an object set
+func (s *HTTP) UpdateObjectGroup(w http.ResponseWriter, r *http.Request) {
 	if IsMockMode(r.Context()) {
 		mock.UpdateObjectGroup(w, r)
 		return
@@ -451,7 +451,7 @@ func (h *BaseServer) UpdateObjectGroup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var req UpdateObjectGroupRequest
+	var req UpdateObjectSetRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		respondError(w, http.StatusBadRequest, "INVALID_REQUEST", err.Error())
 		return
@@ -462,20 +462,20 @@ func (h *BaseServer) UpdateObjectGroup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	revision, err := h.engine.GetDB().UpdateObjectGroup(r.Context(), tenantID, id, req.Name)
+	revision, err := s.engine.GetDB().UpdateObjectGroup(r.Context(), tenantID, id, req.Name)
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
-			respondError(w, http.StatusNotFound, "NOT_FOUND", "Object group not found")
+			respondError(w, http.StatusNotFound, "NOT_FOUND", "object set not found")
 			return
 		}
 		respondError(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return
 	}
 
-	oa, _ := h.engine.GetDB().GetObjectGroup(r.Context(), tenantID, id)
+	oa, _ := s.engine.GetDB().GetObjectGroup(r.Context(), tenantID, id)
 
-	response := ObjectGroupResponse{
-		Group: ObjectGroup{
+	response := ObjectSetResponse{
+		Group: api.ObjectSet{
 			ID:        oa.ID,
 			Name:      oa.Name,
 			CreatedAt: oa.CreatedAt,
@@ -487,8 +487,8 @@ func (h *BaseServer) UpdateObjectGroup(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(response)
 }
 
-// DeleteObjectGroup deletes an object group
-func (h *BaseServer) DeleteObjectGroup(w http.ResponseWriter, r *http.Request) {
+// DeleteObjectGroup deletes an object set
+func (s *HTTP) DeleteObjectGroup(w http.ResponseWriter, r *http.Request) {
 	if IsMockMode(r.Context()) {
 		mock.DeleteObjectGroup(w, r)
 		return
@@ -507,10 +507,10 @@ func (h *BaseServer) DeleteObjectGroup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, err = h.engine.GetDB().DeleteObjectGroup(r.Context(), tenantID, id)
+	_, err = s.engine.GetDB().DeleteObjectGroup(r.Context(), tenantID, id)
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
-			respondError(w, http.StatusNotFound, "NOT_FOUND", "Object group not found")
+			respondError(w, http.StatusNotFound, "NOT_FOUND", "object set not found")
 			return
 		}
 		respondError(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
@@ -519,4 +519,3 @@ func (h *BaseServer) DeleteObjectGroup(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusNoContent)
 }
-
