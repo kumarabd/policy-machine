@@ -29,6 +29,7 @@ func New() (*Config, error) {
 			Base: &server.BaseServerConfig{
 				Port: 8500, // Default port
 			},
+			Name: "policy-machine-api", // Default name
 		},
 		Engine:   &engine.Config{},
 		Metrics:  &metrics.Options{},

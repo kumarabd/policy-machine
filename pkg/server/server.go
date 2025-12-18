@@ -51,8 +51,9 @@ func New(l *logger.Handler, m *metrics.Handler, config *Config, eng *engine.Engi
 		metric: m,
 	}
 	httpObj.handler = chi.NewRouter()
-	// Register all routes
-	httpObj.RegisterRoutes()
+	// Register all routes (get tenant ID from engine config)
+	defaultTenantID := eng.GetTenantID()
+	httpObj.RegisterRoutes(defaultTenantID)
 
 	return &Handler{
 		BaseServer: httpObj,

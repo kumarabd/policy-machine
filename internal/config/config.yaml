@@ -1,15 +1,16 @@
 # Server configurations
 server:
+  name: policy-machine
   base:
     port: 8500
 engine:
-  tenant_id: tenant1
+  tenant_id: "00000000-0000-0000-0000-000000000001"  # Default tenant UUID (required)
 postgres:
   endpoint: 
     username: policy
     password: password123
     host: localhost
-    port: 5432
+    port: 5434
     db: policy
     ssl_mode: disable
   dial_timeout_seconds: 10

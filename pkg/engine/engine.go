@@ -37,10 +37,11 @@ type CacheLimits struct {
 
 // Config holds engine configuration
 type Config struct {
-	TenantID          uuid.UUID
-	MaxTraversalNodes int           // Maximum nodes to traverse in BFS operations (default: 100000)
-	CacheTTL          time.Duration // Default TTL for most caches (default: 2 minutes)
-	Limits            CacheLimits   // Cache capacity limits (zero = use defaults)
+	TenantID          uuid.UUID     `yaml:"tenant_id" json:"tenant_id"`
+	MaxTraversalNodes int           `yaml:"max_traversal_nodes" json:"max_traversal_nodes"` // Maximum nodes to traverse in BFS operations (default: 100000)
+	CacheTTL          time.Duration `yaml:"cache_ttl" json:"cache_ttl"`                     // Default TTL for most caches (default: 2 minutes)
+	Limits            CacheLimits   `yaml:"limits" json:"limits"`                           // Cache capacity limits (zero = use defaults)
+	MockMode          bool          `yaml:"mock_mode" json:"mock_mode"`                     // Enable mock mode for API responses
 }
 
 type Engine struct {
@@ -137,6 +138,16 @@ func New(log *logger.Handler, metric *metrics.Handler, db *postgres.Handler, cfg
 	return e
 }
 
+// GetDB returns the database handler (for use by HTTP handlers)
+func (e *Engine) GetDB() *postgres.Handler {
+	return e.db
+}
+
+// GetTenantID returns the tenant ID from engine config
+func (e *Engine) GetTenantID() uuid.UUID {
+	return e.tenantID
+}
+
 // Refresh rebuilds the in-memory snapshot and swaps it atomically.
 func (e *Engine) Refresh(ctx context.Context) error {
 	snap, err := LoadSnapshot(ctx, e.db.H, e.tenantID)
@@ -175,6 +186,11 @@ func (e *Engine) Snapshot() *Snapshot {
 }
 
 // --- Decision (uses closures + bitmaps + cache) ---
+// AllowedFor returns the set of OAs allowed for a user/operation (public for explain endpoint)
+func (e *Engine) AllowedFor(s *Snapshot, user uuid.UUID, op string, uaClosure *roaring.Bitmap) *roaring.Bitmap {
+	return e.allowedFor(s, user, op, uaClosure)
+}
+
 func (e *Engine) allowedFor(s *Snapshot, user uuid.UUID, op string, uaClosure *roaring.Bitmap) *roaring.Bitmap {
 	if b, ok := e.allowCache.Get(user, op); ok {
 		return b
@@ -195,6 +211,11 @@ func (e *Engine) allowedFor(s *Snapshot, user uuid.UUID, op string, uaClosure *r
 	// Store immutable bitmap (don’t mutate later)
 	e.allowCache.Put(user, op, allowed)
 	return allowed
+}
+
+// DeniedFor returns the set of OAs denied for a user/operation (public for explain endpoint)
+func (e *Engine) DeniedFor(s *Snapshot, user uuid.UUID, op string, uaClosure *roaring.Bitmap) *roaring.Bitmap {
+	return e.deniedFor(s, user, op, uaClosure)
 }
 
 func (e *Engine) deniedFor(s *Snapshot, user uuid.UUID, op string, uaClosure *roaring.Bitmap) *roaring.Bitmap {

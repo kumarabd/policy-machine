@@ -5,6 +5,11 @@ import (
 	"github.com/google/uuid"
 )
 
+// UserUAClosure returns bitmap of UA indices reachable from user's assigned UAs (including them) (public for explain)
+func (e *Engine) UserUAClosure(s *Snapshot, userID uuid.UUID) *roaring.Bitmap {
+	return e.userUAClosure(s, userID)
+}
+
 // userUAClosure returns bitmap of UA indices reachable from user's assigned UAs (including them)
 func (e *Engine) userUAClosure(s *Snapshot, userID uuid.UUID) *roaring.Bitmap {
 	if bmp, ok := e.uaCache.Get(userID); ok {
@@ -18,6 +23,11 @@ func (e *Engine) userUAClosure(s *Snapshot, userID uuid.UUID) *roaring.Bitmap {
 
 	e.uaCache.Put(userID, out)
 	return out
+}
+
+// ObjectOAClosure returns bitmap of OA indices reachable from object's assigned OAs (including them) (public for explain)
+func (e *Engine) ObjectOAClosure(s *Snapshot, objectID uuid.UUID) *roaring.Bitmap {
+	return e.objectOAClosure(s, objectID)
 }
 
 // objectOAClosure returns bitmap of OA indices reachable from object's assigned OAs (including them)

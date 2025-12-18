@@ -48,17 +48,7 @@ type RoleDetails struct {
 	EntityID string `json:"entity_id"`
 }
 
-// ErrorResponse represents an error response
-// swagger:model ErrorResponse
-type ErrorResponse struct {
-	// Error code
-	// example: validation_error
-	Error string `json:"error"`
-
-	// Error message
-	// example: Role name is required
-	Message string `json:"message"`
-}
+// ErrorResponse is now defined in api_models.go
 
 // Placeholder types for swagger generation (these would be properly implemented in a real system)
 

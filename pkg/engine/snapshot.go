@@ -45,6 +45,16 @@ type Snapshot struct {
 	uaProhibits   map[uint32]map[string]*roaring.Bitmap
 }
 
+// UAByIdx returns the UA ID array (for explain endpoint)
+func (s *Snapshot) UAByIdx() []uuid.UUID {
+	return s.uaByIdx
+}
+
+// OAByIdx returns the OA ID array (for explain endpoint)
+func (s *Snapshot) OAByIdx() []uuid.UUID {
+	return s.oaByIdx
+}
+
 func (s *Snapshot) UsersInUASubtree(root uint32) []uuid.UUID {
 	seenUA := map[uint32]struct{}{}
 	seenUser := map[uuid.UUID]struct{}{}
