@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/RoaringBitmap/roaring"
-	"github.com/kumarabd/policy-machine/pkg/postgres"
+	"github.com/kumarabd/policy-machine/internal/postgres"
 	"gorm.io/gorm"
 )
 

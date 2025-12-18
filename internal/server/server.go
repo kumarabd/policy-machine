@@ -6,7 +6,7 @@ import (
 	"github.com/kumarabd/gokit/logger"
 	"github.com/kumarabd/policy-machine/internal/metrics"
 	"github.com/kumarabd/policy-machine/pkg/engine"
-	"github.com/kumarabd/policy-machine/pkg/http"
+	"github.com/kumarabd/policy-machine/internal/http"
 )
 
 // Server defines the interface for any server implementation (HTTP, gRPC, etc.)

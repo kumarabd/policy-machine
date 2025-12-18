@@ -9,7 +9,7 @@ import (
 	"github.com/RoaringBitmap/roaring"
 	"github.com/google/uuid"
 	"github.com/kumarabd/policy-machine/pkg/api"
-	"github.com/kumarabd/policy-machine/pkg/mock"
+	"github.com/kumarabd/policy-machine/internal/mock"
 )
 
 // Authorize handles authorization requests

@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 
 	"github.com/google/uuid"
-	"github.com/kumarabd/policy-machine/pkg/validate"
+	"github.com/kumarabd/policy-machine/internal/validate"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )

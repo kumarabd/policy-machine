@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/kumarabd/policy-machine/pkg/api"
-	"github.com/kumarabd/policy-machine/pkg/mock"
+	"github.com/kumarabd/policy-machine/internal/mock"
 )
 
 // GetMeta returns service metadata

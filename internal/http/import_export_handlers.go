@@ -7,8 +7,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/kumarabd/policy-machine/pkg/api"
-	"github.com/kumarabd/policy-machine/pkg/mock"
-	"github.com/kumarabd/policy-machine/pkg/postgres"
+	"github.com/kumarabd/policy-machine/internal/mock"
+	"github.com/kumarabd/policy-machine/internal/postgres"
 )
 
 // ExportPolicy exports the entire policy as a bundle

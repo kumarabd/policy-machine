@@ -6,9 +6,9 @@ import (
 	"strconv"
 
 	"github.com/google/uuid"
-	"github.com/kumarabd/policy-machine/pkg/mock"
-	"github.com/kumarabd/policy-machine/pkg/postgres"
-	"github.com/kumarabd/policy-machine/pkg/validate"
+	"github.com/kumarabd/policy-machine/internal/mock"
+	"github.com/kumarabd/policy-machine/internal/postgres"
+	"github.com/kumarabd/policy-machine/internal/validate"
 	"gorm.io/gorm"
 )
 

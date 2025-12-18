@@ -5,7 +5,7 @@ import (
 	"net/http"
 
 	"github.com/kumarabd/policy-machine/pkg/engine"
-	"github.com/kumarabd/policy-machine/pkg/postgres"
+	"github.com/kumarabd/policy-machine/internal/postgres"
 )
 
 // respondError writes a JSON error response

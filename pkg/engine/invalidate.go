@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 
 	"github.com/google/uuid"
-	"github.com/kumarabd/policy-machine/pkg/postgres"
+	"github.com/kumarabd/policy-machine/internal/postgres"
 )
 
 type invalidation struct {

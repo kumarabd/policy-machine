@@ -10,8 +10,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/kumarabd/gokit/logger"
 	"github.com/kumarabd/policy-machine/internal/metrics"
-	"github.com/kumarabd/policy-machine/pkg/cache"
-	"github.com/kumarabd/policy-machine/pkg/postgres"
+	"github.com/kumarabd/policy-machine/internal/cache"
+	"github.com/kumarabd/policy-machine/internal/postgres"
 )
 
 // Config holds engine configuration

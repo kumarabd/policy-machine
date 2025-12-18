@@ -55,8 +55,8 @@ import (
 	"github.com/kumarabd/policy-machine/internal/config"
 	"github.com/kumarabd/policy-machine/internal/metrics"
 	"github.com/kumarabd/policy-machine/pkg/engine"
-	"github.com/kumarabd/policy-machine/pkg/postgres"
-	"github.com/kumarabd/policy-machine/pkg/server"
+	"github.com/kumarabd/policy-machine/internal/postgres"
+	"github.com/kumarabd/policy-machine/internal/server"
 )
 
 // main is the entry point of the application

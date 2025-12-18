@@ -6,7 +6,7 @@ import (
 
 	"github.com/RoaringBitmap/roaring"
 	"github.com/google/uuid"
-	"github.com/kumarabd/policy-machine/pkg/postgres"
+	"github.com/kumarabd/policy-machine/internal/postgres"
 )
 
 func applyChange(s *Snapshot, ch postgres.PolicyChange) error {

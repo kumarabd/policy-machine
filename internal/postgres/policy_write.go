@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/google/uuid"
-	"github.com/kumarabd/policy-machine/pkg/validate"
+	"github.com/kumarabd/policy-machine/internal/validate"
 	"gorm.io/gorm"
 )
 

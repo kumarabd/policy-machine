@@ -7,7 +7,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/kumarabd/policy-machine/pkg/api"
-	"github.com/kumarabd/policy-machine/pkg/mock"
+	"github.com/kumarabd/policy-machine/internal/mock"
 )
 
 // GetVersionDiff returns the diff between two versions
