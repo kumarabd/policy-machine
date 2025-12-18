@@ -28,14 +28,14 @@ func TenantMiddleware(eng *engine.Engine, defaultTenantID uuid.UUID) func(http.H
 
 			// Require tenant ID header - no fallbacks
 			if tenantID == "" {
-				respondError(w, http.StatusBadRequest, "MISSING_TENANT", "X-Tenant-ID or X-Tenant-Id header is required")
+				RespondError(w, http.StatusBadRequest, "MISSING_TENANT", "X-Tenant-ID or X-Tenant-Id header is required")
 				return
 			}
 
 			// Parse UUID from header
 			tenantUUID, err := uuid.Parse(tenantID)
 			if err != nil {
-				respondError(w, http.StatusBadRequest, "INVALID_TENANT", "Invalid tenant ID format: must be a valid UUID")
+				RespondError(w, http.StatusBadRequest, "INVALID_TENANT", "Invalid tenant ID format: must be a valid UUID")
 				return
 			}
 

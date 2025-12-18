@@ -1,12 +1,11 @@
 package server
 
 import (
-	"strings"
-
 	"github.com/kumarabd/gokit/logger"
 	"github.com/kumarabd/policy-machine/internal/metrics"
 	"github.com/kumarabd/policy-machine/pkg/engine"
-	"github.com/kumarabd/policy-machine/internal/http"
+	"github.com/kumarabd/policy-machine/internal/http/dataplane"
+	"github.com/kumarabd/policy-machine/internal/http/controlplane"
 )
 
 // Server defines the interface for any server implementation (HTTP, gRPC, etc.)
@@ -15,48 +14,85 @@ type Server interface {
 	Stop() error
 }
 
-// BaseServerConfig holds base server configuration (port, etc.)
-type BaseServerConfig struct {
+// DataplaneConfig holds dataplane server configuration
+type DataplaneConfig struct {
 	Port int64 `json:"port" yaml:"port"`
 }
 
-// Config holds server configuration
+// ControlplaneConfig holds controlplane server configuration
+type ControlplaneConfig struct {
+	Port int64 `json:"port" yaml:"port"`
+}
+
+// Config holds server configuration for both dataplane and controlplane
 type Config struct {
-	Name string            `json:"name" yaml:"name"`
-	Base *BaseServerConfig `json:"base" yaml:"base"`
+	Name         string             `json:"name" yaml:"name"`
+	Dataplane    *DataplaneConfig  `json:"dataplane" yaml:"dataplane"`
+	Controlplane *ControlplaneConfig `json:"controlplane" yaml:"controlplane"`
 }
 
-// New creates a new server instance based on configuration
-// Currently returns HTTP server, but can be extended to support other protocols
-func New(l *logger.Handler, m *metrics.Handler, config *Config, eng *engine.Engine) (Server, error) {
-	// For now, always return HTTP server
-	// In the future, this could check config to return HTTP, gRPC, or other implementations
-	return newHTTPServer(l, m, config, eng)
+// Servers holds both dataplane and controlplane server instances
+type Servers struct {
+	Dataplane    Server
+	Controlplane Server
 }
 
-// newHTTPServer creates an HTTP server instance
-// This is a private function - external code should use New() which returns the Server interface
-func newHTTPServer(l *logger.Handler, m *metrics.Handler, config *Config, eng *engine.Engine) (Server, error) {
-	// Convert server.Config to http.Config
-	httpConfig := &http.Config{
+// NewServers creates both dataplane and controlplane server instances
+func NewServers(l *logger.Handler, m *metrics.Handler, config *Config, eng *engine.Engine) (*Servers, error) {
+	// Create dataplane server
+	dataplaneConfig := &dataplane.Config{
 		Port: 8500, // Default port
 	}
-	if config.Base != nil {
-		httpConfig.Port = config.Base.Port
+	if config.Dataplane != nil && config.Dataplane.Port > 0 {
+		dataplaneConfig.Port = config.Dataplane.Port
 	}
 
-	// Directly create HTTP server using dependency injection
-	return http.New(l, m, httpConfig, eng)
+	dataplaneSrv, err := dataplane.New(l, m, dataplaneConfig, eng)
+	if err != nil {
+		return nil, err
+	}
+
+	// Create controlplane server
+	controlplaneConfig := &controlplane.Config{
+		Port: 8501, // Default port
+	}
+	if config.Controlplane != nil && config.Controlplane.Port > 0 {
+		controlplaneConfig.Port = config.Controlplane.Port
+	}
+
+	controlplaneSrv, err := controlplane.New(l, m, controlplaneConfig, eng)
+	if err != nil {
+		return nil, err
+	}
+
+	return &Servers{
+		Dataplane:    dataplaneSrv,
+		Controlplane: controlplaneSrv,
+	}, nil
 }
 
-// formatTitle converts "abc-def" format to "Abc Def" format
-// Examples: "policy-machine" -> "Policy Machine", "auth-service" -> "Auth Service"
-func formatTitle(name string) string {
-	parts := strings.Split(name, "-")
-	for i, part := range parts {
-		if len(part) > 0 {
-			parts[i] = strings.ToUpper(string(part[0])) + strings.ToLower(part[1:])
-		}
+// Start starts both servers
+func (s *Servers) Start(ch chan struct{}) error {
+	// Start dataplane server
+	if err := s.Dataplane.Start(ch); err != nil {
+		return err
 	}
-	return strings.Join(parts, " ")
+
+	// Start controlplane server
+	if err := s.Controlplane.Start(ch); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// Stop stops both servers
+func (s *Servers) Stop() error {
+	if err := s.Dataplane.Stop(); err != nil {
+		return err
+	}
+	if err := s.Controlplane.Stop(); err != nil {
+		return err
+	}
+	return nil
 }

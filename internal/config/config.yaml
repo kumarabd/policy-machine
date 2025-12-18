@@ -1,8 +1,10 @@
 # Server configurations
 server:
   name: policy-machine
-  base:
-    port: 8500
+  dataplane:
+    port: 8500  # Fast path for authorization decisions
+  controlplane:
+    port: 8501  # Policy management APIs
 engine:
   tenant_id: "00000000-0000-0000-0000-000000000001"  # Default tenant UUID (required)
   max_traversal_nodes: 100000  # Maximum nodes to traverse in BFS operations (default: 100000)

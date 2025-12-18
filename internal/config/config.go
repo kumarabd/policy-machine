@@ -26,8 +26,11 @@ func New() (*Config, error) {
 	// Create default config object
 	configObject := &Config{
 		Server: &server.Config{
-			Base: &server.BaseServerConfig{
-				Port: 8500, // Default port
+			Dataplane: &server.DataplaneConfig{
+				Port: 8500, // Default dataplane port
+			},
+			Controlplane: &server.ControlplaneConfig{
+				Port: 8501, // Default controlplane port
 			},
 			Name: "policy-machine-api", // Default name
 		},

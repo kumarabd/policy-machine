@@ -95,21 +95,24 @@ func main() {
 	engine := engine.New(log, metricsHandler, dbHandler, configHandler.Engine, nil, nil)
 	log.Info().Msg("engine initialized")
 
-	// Initialize a new server with the logger, metrics handler, server configuration, and engine
-	srv, err := server.New(log, metricsHandler, configHandler.Server, engine)
+	// Initialize both dataplane and controlplane servers
+	servers, err := server.NewServers(log, metricsHandler, configHandler.Server, engine)
 	if err != nil {
-		log.Error().Err(err).Msg("")
+		log.Error().Err(err).Msg("server initialization failed")
 		os.Exit(1)
 	}
-	log.Info().Msg("server initialized")
+	log.Info().Msg("servers initialized")
 
-	// Create a channel to control the server
+	// Create a channel to control the servers
 	ch := make(chan struct{})
 
-	// Run the server
-	log.Info().Msg("server starting")
-	srv.Start(ch)
-	log.Info().Msg("server running")
+	// Run both servers
+	log.Info().Msg("servers starting")
+	if err := servers.Start(ch); err != nil {
+		log.Error().Err(err).Msg("failed to start servers")
+		os.Exit(1)
+	}
+	log.Info().Msg("servers running")
 
 	// Create a signal channel to handle graceful shutdown
 	signalChan := make(chan os.Signal, 1)
@@ -127,5 +130,8 @@ func main() {
 	}
 
 	log.Info().Msg("received stop. gracefully shutting down...")
+	if err := servers.Stop(); err != nil {
+		log.Error().Err(err).Msg("error stopping servers")
+	}
 	close(ch)
 }
