@@ -5,23 +5,21 @@ import (
 
 	"github.com/google/uuid"
 	"gorm.io/datatypes"
-	"gorm.io/gorm"
-	"gorm.io/gorm/schema"
 )
 
 // --- Core entities ---
 
 type Tenant struct {
-	ID        uuid.UUID `gorm:"type:uuid;default:gen_random_uuid();primaryKey"`
-	Name      string    `gorm:"not null;uniqueIndex"`
+	ID        string `gorm:"type:text;not null;primaryKey"`
+	Name      string `gorm:"not null;index:uidx_tenants_name,unique"`
 	CreatedAt time.Time
 	UpdatedAt time.Time
 }
 
-type User struct {
+type Subject struct {
 	ID         uuid.UUID `gorm:"type:uuid;default:gen_random_uuid();primaryKey"`
-	TenantID   uuid.UUID `gorm:"type:uuid;not null;index:idx_users_tenant"`
-	ExternalID string    `gorm:"not null;index:uidx_users_tenant_external,unique"`
+	TenantID   string    `gorm:"type:text;not null;index:idx_subjects_tenant"`
+	ExternalID string    `gorm:"not null;index:uidx_subjects_tenant_external,unique"`
 	Email      string    `gorm:"index"`
 	Display    string    `gorm:""`
 
@@ -31,9 +29,14 @@ type User struct {
 	Tenant Tenant `gorm:"constraint:OnUpdate:CASCADE,OnDelete:CASCADE;"`
 }
 
+// TableName specifies the table name for GORM
+func (Subject) TableName() string {
+	return "subjects"
+}
+
 type Object struct {
 	ID       uuid.UUID `gorm:"type:uuid;default:gen_random_uuid();primaryKey"`
-	TenantID uuid.UUID `gorm:"type:uuid;not null;index:idx_objects_tenant"`
+	TenantID string    `gorm:"type:text;not null;index:idx_objects_tenant"`
 
 	// App-level identifier for the protected resource
 	ExternalID string `gorm:"not null;index:uidx_objects_tenant_external,unique"`
@@ -49,7 +52,7 @@ type Object struct {
 
 type PolicyClass struct {
 	ID       uuid.UUID `gorm:"type:uuid;default:gen_random_uuid();primaryKey"`
-	TenantID uuid.UUID `gorm:"type:uuid;not null;index:idx_pc_tenant"`
+	TenantID string    `gorm:"type:text;not null;index:idx_pc_tenant"`
 
 	Name string `gorm:"not null;index:uidx_pc_tenant_name,unique"`
 
@@ -62,7 +65,7 @@ type PolicyClass struct {
 // NGAC: User Attribute (UA) and Object Attribute (OA)
 type UserAttribute struct {
 	ID       uuid.UUID `gorm:"type:uuid;default:gen_random_uuid();primaryKey"`
-	TenantID uuid.UUID `gorm:"type:uuid;not null;index:idx_ua_tenant"`
+	TenantID string    `gorm:"type:text;not null;index:idx_ua_tenant"`
 	Name     string    `gorm:"not null;index:uidx_ua_tenant_name,unique"`
 
 	CreatedAt time.Time
@@ -73,7 +76,7 @@ type UserAttribute struct {
 
 type ObjectAttribute struct {
 	ID       uuid.UUID `gorm:"type:uuid;default:gen_random_uuid();primaryKey"`
-	TenantID uuid.UUID `gorm:"type:uuid;not null;index:idx_oa_tenant"`
+	TenantID string    `gorm:"type:text;not null;index:idx_oa_tenant"`
 	Name     string    `gorm:"not null;index:uidx_oa_tenant_name,unique"`
 
 	CreatedAt time.Time
@@ -106,7 +109,7 @@ const (
 // AssignmentEdge represents: Child -> Parent (in NGAC assignment graphs)
 type AssignmentEdge struct {
 	ID       uuid.UUID `gorm:"type:uuid;default:gen_random_uuid();primaryKey"`
-	TenantID uuid.UUID `gorm:"type:uuid;not null;index:idx_asg_tenant"`
+	TenantID string    `gorm:"type:text;not null;index:idx_asg_tenant"`
 
 	ChildType NodeType  `gorm:"type:text;not null;index:idx_asg_child"`
 	ChildID   uuid.UUID `gorm:"type:uuid;not null;index:idx_asg_child"`
@@ -117,23 +120,24 @@ type AssignmentEdge struct {
 	CreatedAt time.Time
 
 	// Uniqueness: avoid duplicate edges per tenant
-	// NOTE: GORM doesn't support composite unique across multiple indexes in a single tag cleanly,
-	// so we define a single composite unique index by naming it consistently.
-	// All four fields + tenant must be unique.
-	_ struct{} `gorm:"uniqueIndex:uidx_asg_edge,priority:1"`
-	// We attach the unique index via tags on fields:
+	// The composite unique index uidx_asg_edge is defined on:
+	// tenant_id, child_type, child_id, parent_type, parent_id
+	// This is created via SQL in postgres.go for precision.
+	// We don't use GORM uniqueIndex tags here to avoid conflicts with the SQL index.
 }
 
-// Attach composite unique index tags on the fields:
-func (AssignmentEdge) GormDBDataType(*gorm.DB, *schema.Field) string { return "" } // no-op; keep file gofmt-friendly
+// TableName specifies the table name for GORM
+func (AssignmentEdge) TableName() string {
+	return "assignment_edges"
+}
 
 // Methods for validate package interface
-func (e *AssignmentEdge) GetTenantID() uuid.UUID { return e.TenantID }
+func (e *AssignmentEdge) GetTenantID() string    { return e.TenantID }
 func (e *AssignmentEdge) GetChildType() string   { return string(e.ChildType) }
 func (e *AssignmentEdge) GetChildID() uuid.UUID  { return e.ChildID }
 func (e *AssignmentEdge) GetParentType() string  { return string(e.ParentType) }
 func (e *AssignmentEdge) GetParentID() uuid.UUID { return e.ParentID }
-func (e *AssignmentEdge) SetTenantID(id uuid.UUID) { e.TenantID = id }
+func (e *AssignmentEdge) SetTenantID(id string)  { e.TenantID = id }
 
 // --- Associations ---
 // Association: UA <-> OA grants operations.
@@ -141,7 +145,7 @@ func (e *AssignmentEdge) SetTenantID(id uuid.UUID) { e.TenantID = id }
 
 type Association struct {
 	ID       uuid.UUID `gorm:"type:uuid;default:gen_random_uuid();primaryKey"`
-	TenantID uuid.UUID `gorm:"type:uuid;not null;index:idx_assoc_tenant"`
+	TenantID string    `gorm:"type:text;not null;index:idx_assoc_tenant"`
 
 	UserAttributeID   uuid.UUID `gorm:"type:uuid;not null;index:idx_assoc_ua"`
 	ObjectAttributeID uuid.UUID `gorm:"type:uuid;not null;index:idx_assoc_oa"`
@@ -155,7 +159,7 @@ type Association struct {
 
 type AssociationOperation struct {
 	ID            uuid.UUID `gorm:"type:uuid;default:gen_random_uuid();primaryKey"`
-	TenantID      uuid.UUID `gorm:"type:uuid;not null;index:idx_assocop_tenant"`
+	TenantID      string    `gorm:"type:text;not null;index:idx_assocop_tenant"`
 	AssociationID uuid.UUID `gorm:"type:uuid;not null;index:idx_assocop_assoc"`
 
 	// Operation name: "read", "write", "delete", "admin", etc.
@@ -179,7 +183,7 @@ const (
 
 type Prohibition struct {
 	ID       uuid.UUID `gorm:"type:uuid;default:gen_random_uuid();primaryKey"`
-	TenantID uuid.UUID `gorm:"type:uuid;not null;index:idx_proh_tenant"`
+	TenantID string    `gorm:"type:text;not null;index:idx_proh_tenant"`
 
 	SubjectType ProhibitionSubjectType `gorm:"type:text;not null;index:idx_proh_subj"`
 	SubjectID   uuid.UUID              `gorm:"type:uuid;not null;index:idx_proh_subj"`
@@ -191,7 +195,7 @@ type Prohibition struct {
 
 type ProhibitionOperation struct {
 	ID            uuid.UUID `gorm:"type:uuid;default:gen_random_uuid();primaryKey"`
-	TenantID      uuid.UUID `gorm:"type:uuid;not null;index:idx_prohop_tenant"`
+	TenantID      string    `gorm:"type:text;not null;index:idx_prohop_tenant"`
 	ProhibitionID uuid.UUID `gorm:"type:uuid;not null;index:idx_prohop_proh"`
 	Operation     string    `gorm:"type:text;not null;index:idx_prohop_op"`
 	CreatedAt     time.Time
@@ -203,7 +207,7 @@ type ProhibitionOperation struct {
 
 type Obligation struct {
 	ID       uuid.UUID `gorm:"type:uuid;default:gen_random_uuid();primaryKey"`
-	TenantID uuid.UUID `gorm:"type:uuid;not null;index:idx_obl_tenant"`
+	TenantID string    `gorm:"type:text;not null;index:idx_obl_tenant"`
 
 	// Example: "ACCESS_GRANTED", "ACCESS_DENIED", "ASSIGNMENT_ADDED", etc.
 	Event string `gorm:"type:text;not null;index:idx_obl_event"`

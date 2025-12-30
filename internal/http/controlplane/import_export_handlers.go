@@ -6,10 +6,10 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/kumarabd/policy-machine/pkg/api"
+	httputil "github.com/kumarabd/policy-machine/internal/http"
 	"github.com/kumarabd/policy-machine/internal/mock"
 	"github.com/kumarabd/policy-machine/internal/postgres"
-	httputil "github.com/kumarabd/policy-machine/internal/http"
+	"github.com/kumarabd/policy-machine/pkg/api"
 )
 
 // ExportPolicy exports the entire policy as a bundle
@@ -27,9 +27,9 @@ func (s *Server) ExportPolicy(w http.ResponseWriter, r *http.Request) {
 
 	// Get all entities
 	users, _, _, _ := s.engine.GetDB().ListSubjects(r.Context(), tenantID, "", 10000, "")
-	uas, _, _, _ := s.engine.GetDB().ListSubjectGroups(r.Context(), tenantID, "", 10000, "")
+	uas, _, _, _ := s.engine.GetDB().ListSubjectSets(r.Context(), tenantID, "", 10000, "")
 	objects, _, _, _ := s.engine.GetDB().ListObjects(r.Context(), tenantID, "", 10000, "")
-	oas, _, _, _ := s.engine.GetDB().ListObjectGroups(r.Context(), tenantID, "", 10000, "")
+	oas, _, _, _ := s.engine.GetDB().ListObjectSets(r.Context(), tenantID, "", 10000, "")
 	edges, _, _, _ := s.engine.GetDB().ListRelationships(r.Context(), tenantID, map[string]interface{}{}, 10000, "")
 	_, assocs, _, _, _ := s.engine.GetDB().ListRules(r.Context(), tenantID, map[string]interface{}{}, 10000, "")
 	_, prohs, _, _, _ := s.engine.GetDB().ListDenies(r.Context(), tenantID, map[string]interface{}{}, 10000, "")
@@ -182,12 +182,12 @@ func (s *Server) ImportPolicy(w http.ResponseWriter, r *http.Request) {
 
 	// Import subjects
 	for _, subj := range req.Bundle.Subjects {
-		user := &postgres.User{
+		subject := &postgres.Subject{
 			ExternalID: subj.ExternalID,
 			Email:      subj.Email,
 			Display:    subj.Display,
 		}
-		_, err := s.engine.GetDB().CreateSubject(r.Context(), tenantID, user)
+		_, err := s.engine.GetDB().CreateSubject(r.Context(), tenantID, subject)
 		if err == nil {
 			applied++
 		}
@@ -196,7 +196,7 @@ func (s *Server) ImportPolicy(w http.ResponseWriter, r *http.Request) {
 	// Import subject sets
 	for _, sg := range req.Bundle.SubjectSets {
 		ua := &postgres.UserAttribute{Name: sg.Name}
-		_, err := s.engine.GetDB().CreateSubjectGroup(r.Context(), tenantID, ua)
+		_, err := s.engine.GetDB().CreateSubjectSet(r.Context(), tenantID, ua)
 		if err == nil {
 			applied++
 		}
@@ -217,7 +217,7 @@ func (s *Server) ImportPolicy(w http.ResponseWriter, r *http.Request) {
 	// Import object sets
 	for _, og := range req.Bundle.ObjectSets {
 		oa := &postgres.ObjectAttribute{Name: og.Name}
-		_, err := s.engine.GetDB().CreateObjectGroup(r.Context(), tenantID, oa)
+		_, err := s.engine.GetDB().CreateObjectSet(r.Context(), tenantID, oa)
 		if err == nil {
 			applied++
 		}

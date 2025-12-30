@@ -9,7 +9,7 @@ import (
 	"gorm.io/gorm"
 )
 
-func LoadSnapshot(ctx context.Context, db *gorm.DB, tenantID uuid.UUID) (*Snapshot, error) {
+func LoadSnapshot(ctx context.Context, db *gorm.DB, tenantID string) (*Snapshot, error) {
 	s := &Snapshot{
 		TenantID: tenantID,
 

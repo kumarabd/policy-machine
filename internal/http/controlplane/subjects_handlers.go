@@ -7,16 +7,16 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
-	"github.com/kumarabd/policy-machine/pkg/api"
+	httputil "github.com/kumarabd/policy-machine/internal/http"
 	"github.com/kumarabd/policy-machine/internal/mock"
 	"github.com/kumarabd/policy-machine/internal/postgres"
-	httputil "github.com/kumarabd/policy-machine/internal/http"
+	"github.com/kumarabd/policy-machine/pkg/api"
 	"gorm.io/gorm"
 )
 
 // ListSubjects returns paginated list of subjects
 // @Summary List subjects
-// @Description Returns paginated list of subjects (users)
+// @Description Returns paginated list of subjects
 // @Tags subjects
 // @Produce json
 // @Param query query string false "Search query"
@@ -45,28 +45,28 @@ func (s *Server) ListSubjects(w http.ResponseWriter, r *http.Request) {
 	}
 	cursor := r.URL.Query().Get("cursor")
 
-	users, nextCursor, hasMore, err := s.engine.GetDB().ListSubjects(r.Context(), tenantID, query, limit, cursor)
+	subjectsList, nextCursor, hasMore, err := s.engine.GetDB().ListSubjects(r.Context(), tenantID, query, limit, cursor)
 	if err != nil {
 		httputil.RespondError(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return
 	}
 
-	subjects := make([]api.Subject, len(users))
-	for i, u := range users {
-		displayName := u.Display
+	subjects := make([]api.Subject, len(subjectsList))
+	for i, s := range subjectsList {
+		displayName := s.Display
 		if displayName == "" {
-			displayName = u.ExternalID
+			displayName = s.ExternalID
 		}
 		subjects[i] = api.Subject{
-			ID:          u.ID,
-			ExternalID:  u.ExternalID,
-			Email:       u.Email,
-			Display:     u.Display,
+			ID:          s.ID,
+			ExternalID:  s.ExternalID,
+			Email:       s.Email,
+			Display:     s.Display,
 			DisplayName: displayName,
-			Kind:        "user",
+			Kind:        "subject",
 			Attributes:  make(map[string]string),
 			Tags:        []string{},
-			CreatedAt:   u.CreatedAt,
+			CreatedAt:   s.CreatedAt,
 		}
 	}
 
@@ -88,7 +88,7 @@ func (s *Server) ListSubjects(w http.ResponseWriter, r *http.Request) {
 
 // CreateSubject creates a new subject
 // @Summary Create subject
-// @Description Creates a new subject (user)
+// @Description Creates a new subject
 // @Tags subjects
 // @Accept json
 // @Produce json
@@ -118,13 +118,13 @@ func (s *Server) CreateSubject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user := &postgres.User{
+	subject := &postgres.Subject{
 		ExternalID: req.ExternalID,
 		Email:      req.Email,
 		Display:    req.Display,
 	}
 
-	revision, err := s.engine.GetDB().CreateSubject(r.Context(), tenantID, user)
+	revision, err := s.engine.GetDB().CreateSubject(r.Context(), tenantID, subject)
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
 			httputil.RespondError(w, http.StatusNotFound, "NOT_FOUND", err.Error())
@@ -136,11 +136,11 @@ func (s *Server) CreateSubject(w http.ResponseWriter, r *http.Request) {
 
 	response := api.SubjectResponse{
 		Subject: api.Subject{
-			ID:         user.ID,
-			ExternalID: user.ExternalID,
-			Email:      user.Email,
-			Display:    user.Display,
-			CreatedAt:  user.CreatedAt,
+			ID:         subject.ID,
+			ExternalID: subject.ExternalID,
+			Email:      subject.Email,
+			Display:    subject.Display,
+			CreatedAt:  subject.CreatedAt,
 		},
 		Revision: revision,
 	}
@@ -177,7 +177,7 @@ func (s *Server) GetSubject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user, err := s.engine.GetDB().GetSubject(r.Context(), tenantID, id)
+	subjectDB, err := s.engine.GetDB().GetSubject(r.Context(), tenantID, id)
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
 			httputil.RespondError(w, http.StatusNotFound, "NOT_FOUND", "Subject not found")
@@ -187,20 +187,20 @@ func (s *Server) GetSubject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	displayName := user.Display
+	displayName := subjectDB.Display
 	if displayName == "" {
-		displayName = user.ExternalID
+		displayName = subjectDB.ExternalID
 	}
 	subject := api.Subject{
-		ID:          user.ID,
-		ExternalID:  user.ExternalID,
-		Email:       user.Email,
-		Display:     user.Display,
+		ID:          subjectDB.ID,
+		ExternalID:  subjectDB.ExternalID,
+		Email:       subjectDB.Email,
+		Display:     subjectDB.Display,
 		DisplayName: displayName,
-		Kind:        "user",
+		Kind:        "subject",
 		Attributes:  make(map[string]string),
 		Tags:        []string{},
-		CreatedAt:   user.CreatedAt,
+		CreatedAt:   subjectDB.CreatedAt,
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -266,23 +266,23 @@ func (s *Server) UpdateSubject(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Fetch updated subject
-	user, _ := s.engine.GetDB().GetSubject(r.Context(), tenantID, id)
+	subjectDB, _ := s.engine.GetDB().GetSubject(r.Context(), tenantID, id)
 
-	displayName := user.Display
+	displayName := subjectDB.Display
 	if displayName == "" {
-		displayName = user.ExternalID
+		displayName = subjectDB.ExternalID
 	}
 	response := api.SubjectResponse{
 		Subject: api.Subject{
-			ID:          user.ID,
-			ExternalID:  user.ExternalID,
-			Email:       user.Email,
-			Display:     user.Display,
+			ID:          subjectDB.ID,
+			ExternalID:  subjectDB.ExternalID,
+			Email:       subjectDB.Email,
+			Display:     subjectDB.Display,
 			DisplayName: displayName,
-			Kind:        "user",
+			Kind:        "subject",
 			Attributes:  make(map[string]string),
 			Tags:        []string{},
-			CreatedAt:   user.CreatedAt,
+			CreatedAt:   subjectDB.CreatedAt,
 		},
 		Revision: revision,
 	}
@@ -361,7 +361,7 @@ func (s *Server) ListSubjectGroups(w http.ResponseWriter, r *http.Request) {
 	}
 	cursor := r.URL.Query().Get("cursor")
 
-	uas, nextCursor, hasMore, err := s.engine.GetDB().ListSubjectGroups(r.Context(), tenantID, query, limit, cursor)
+	uas, nextCursor, hasMore, err := s.engine.GetDB().ListSubjectSets(r.Context(), tenantID, query, limit, cursor)
 	if err != nil {
 		httputil.RespondError(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return
@@ -369,13 +369,19 @@ func (s *Server) ListSubjectGroups(w http.ResponseWriter, r *http.Request) {
 
 	groups := make([]api.SubjectSet, len(uas))
 	for i, ua := range uas {
+		// Get member IDs for this subject set
+		memberIDs, err := s.engine.GetDB().GetSubjectSetMembers(r.Context(), tenantID, ua.ID)
+		if err != nil {
+			// Log error but continue with empty member list
+			memberIDs = []uuid.UUID{}
+		}
 		groups[i] = api.SubjectSet{
 			ID:               ua.ID,
 			Name:             ua.Name,
 			Description:      "",
 			ScopeID:          nil,
 			Tags:             []string{},
-			MemberSubjectIDs: []uuid.UUID{}, // TODO: Populate from relationships
+			MemberSubjectIDs: memberIDs,
 			CreatedAt:        ua.CreatedAt,
 			UpdatedAt:        nil,
 		}
@@ -433,7 +439,7 @@ func (s *Server) CreateSubjectGroup(w http.ResponseWriter, r *http.Request) {
 		Name: req.Name,
 	}
 
-	revision, err := s.engine.GetDB().CreateSubjectGroup(r.Context(), tenantID, ua)
+	revision, err := s.engine.GetDB().CreateSubjectSet(r.Context(), tenantID, ua)
 	if err != nil {
 		httputil.RespondError(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return
@@ -480,7 +486,7 @@ func (s *Server) GetSubjectGroup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ua, err := s.engine.GetDB().GetSubjectGroup(r.Context(), tenantID, id)
+	ua, err := s.engine.GetDB().GetSubjectSet(r.Context(), tenantID, id)
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
 			httputil.RespondError(w, http.StatusNotFound, "NOT_FOUND", "subject set not found")
@@ -490,10 +496,22 @@ func (s *Server) GetSubjectGroup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Get member IDs from assignment edges
+	memberIDs, err := s.engine.GetDB().GetSubjectSetMembers(r.Context(), tenantID, id)
+	if err != nil {
+		httputil.RespondError(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
+		return
+	}
+
 	group := api.SubjectSet{
-		ID:        ua.ID,
-		Name:      ua.Name,
-		CreatedAt: ua.CreatedAt,
+		ID:               ua.ID,
+		Name:             ua.Name,
+		Description:      "",
+		ScopeID:          nil,
+		Tags:             []string{},
+		MemberSubjectIDs: memberIDs,
+		CreatedAt:        ua.CreatedAt,
+		UpdatedAt:        &ua.UpdatedAt,
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -540,7 +558,7 @@ func (s *Server) UpdateSubjectGroup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	revision, err := s.engine.GetDB().UpdateSubjectGroup(r.Context(), tenantID, id, req.Name)
+	revision, err := s.engine.GetDB().UpdateSubjectSet(r.Context(), tenantID, id, req.Name)
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
 			httputil.RespondError(w, http.StatusNotFound, "NOT_FOUND", "subject set not found")
@@ -591,7 +609,7 @@ func (s *Server) DeleteSubjectGroup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, err = s.engine.GetDB().DeleteSubjectGroup(r.Context(), tenantID, id)
+	_, err = s.engine.GetDB().DeleteSubjectSet(r.Context(), tenantID, id)
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
 			httputil.RespondError(w, http.StatusNotFound, "NOT_FOUND", "subject set not found")

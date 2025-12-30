@@ -13,7 +13,7 @@ import (
 // 2. Bumps the policy revision
 // 3. Appends policy changes
 // 4. Returns the new revision
-func (h *Handler) WithPolicyWriteTx(ctx context.Context, tenantID uuid.UUID, fn func(tx *gorm.DB) error) (int64, error) {
+func (h *Handler) WithPolicyWriteTx(ctx context.Context, tenantID string, fn func(tx *gorm.DB) error) (int64, error) {
 	var revision int64
 	err := h.H.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		// Execute the provided function
@@ -35,32 +35,64 @@ func (h *Handler) WithPolicyWriteTx(ctx context.Context, tenantID uuid.UUID, fn 
 
 // AppendPolicyChange appends a change to the policy_changes table
 // Should be called within a transaction
-func AppendPolicyChange(tx *gorm.DB, tenantID uuid.UUID, revision int64, kind string, op ChangeOp, payload any) error {
+func AppendPolicyChange(tx *gorm.DB, tenantID string, revision int64, kind string, op ChangeOp, payload any) error {
 	return AppendChange(tx, tenantID, revision, kind, op, payload)
 }
 
-// CreateSubject creates a user (subject) and records the change
-func (h *Handler) CreateSubject(ctx context.Context, tenantID uuid.UUID, user *User) (int64, error) {
+// CreateSubject creates a subject and records the change
+// It is idempotent: if a subject with the same tenant_id and external_id exists, it returns the existing subject
+func (h *Handler) CreateSubject(ctx context.Context, tenantID string, subject *Subject) (int64, error) {
 	return h.WithPolicyWriteTx(ctx, tenantID, func(tx *gorm.DB) error {
-		user.TenantID = tenantID
-		if err := tx.Create(user).Error; err != nil {
+		subject.TenantID = tenantID
+
+		// Check if subject already exists (idempotent)
+		var existing Subject
+		err := tx.Where("tenant_id = ? AND external_id = ?", tenantID, subject.ExternalID).First(&existing).Error
+		if err == nil {
+			// Subject already exists, use it
+			*subject = existing
+			return nil // No change needed, skip revision bump
+		}
+		if err != gorm.ErrRecordNotFound {
+			// Some other error occurred
+			return err
+		}
+
+		// Subject doesn't exist, create it
+		if err := tx.Create(subject).Error; err != nil {
 			return err
 		}
 
 		// Record change
 		rev, _ := BumpRevision(tx, tenantID)
 		payload := map[string]any{
-			"user_id": user.ID,
-			"external_id": user.ExternalID,
+			"subject_id":  subject.ID,
+			"external_id": subject.ExternalID,
 		}
-		return AppendChange(tx, tenantID, rev, "USER_CREATE", OpAdd, payload)
+		return AppendChange(tx, tenantID, rev, "SUBJECT_CREATE", OpAdd, payload)
 	})
 }
 
-// CreateSubjectGroup creates a user attribute (subject group) and records the change
-func (h *Handler) CreateSubjectGroup(ctx context.Context, tenantID uuid.UUID, ua *UserAttribute) (int64, error) {
+// CreateSubjectSet creates a subject attribute (subject set) and records the change
+// It is idempotent: if a subject attribute with the same tenant_id and name exists, it returns the existing one
+func (h *Handler) CreateSubjectSet(ctx context.Context, tenantID string, ua *UserAttribute) (int64, error) {
 	return h.WithPolicyWriteTx(ctx, tenantID, func(tx *gorm.DB) error {
 		ua.TenantID = tenantID
+
+		// Check if subject attribute already exists (idempotent)
+		var existing UserAttribute
+		err := tx.Where("tenant_id = ? AND name = ?", tenantID, ua.Name).First(&existing).Error
+		if err == nil {
+			// Subject attribute already exists, use it
+			*ua = existing
+			return nil // No change needed, skip revision bump
+		}
+		if err != gorm.ErrRecordNotFound {
+			// Some other error occurred
+			return err
+		}
+
+		// Subject attribute doesn't exist, create it
 		if err := tx.Create(ua).Error; err != nil {
 			return err
 		}
@@ -68,33 +100,65 @@ func (h *Handler) CreateSubjectGroup(ctx context.Context, tenantID uuid.UUID, ua
 		rev, _ := BumpRevision(tx, tenantID)
 		payload := map[string]any{
 			"ua_id": ua.ID,
-			"name": ua.Name,
+			"name":  ua.Name,
 		}
 		return AppendChange(tx, tenantID, rev, "UA_CREATE", OpAdd, payload)
 	})
 }
 
 // CreateObject creates an object and records the change
-func (h *Handler) CreateObject(ctx context.Context, tenantID uuid.UUID, obj *Object) (int64, error) {
+// It is idempotent: if an object with the same tenant_id and external_id exists, it returns the existing object
+func (h *Handler) CreateObject(ctx context.Context, tenantID string, obj *Object) (int64, error) {
 	return h.WithPolicyWriteTx(ctx, tenantID, func(tx *gorm.DB) error {
 		obj.TenantID = tenantID
+
+		// Check if object already exists (idempotent)
+		var existing Object
+		err := tx.Where("tenant_id = ? AND external_id = ?", tenantID, obj.ExternalID).First(&existing).Error
+		if err == nil {
+			// Object already exists, use it
+			*obj = existing
+			return nil // No change needed, skip revision bump
+		}
+		if err != gorm.ErrRecordNotFound {
+			// Some other error occurred
+			return err
+		}
+
+		// Object doesn't exist, create it
 		if err := tx.Create(obj).Error; err != nil {
 			return err
 		}
 
 		rev, _ := BumpRevision(tx, tenantID)
 		payload := map[string]any{
-			"object_id": obj.ID,
+			"object_id":   obj.ID,
 			"external_id": obj.ExternalID,
 		}
 		return AppendChange(tx, tenantID, rev, "OBJECT_CREATE", OpAdd, payload)
 	})
 }
 
-// CreateObjectGroup creates an object attribute (object group) and records the change
-func (h *Handler) CreateObjectGroup(ctx context.Context, tenantID uuid.UUID, oa *ObjectAttribute) (int64, error) {
+// CreateObjectSet creates an object attribute (object set) and records the change
+// It is idempotent: if an object attribute with the same tenant_id and name exists, it returns the existing one
+func (h *Handler) CreateObjectSet(ctx context.Context, tenantID string, oa *ObjectAttribute) (int64, error) {
 	return h.WithPolicyWriteTx(ctx, tenantID, func(tx *gorm.DB) error {
 		oa.TenantID = tenantID
+
+		// Check if object attribute already exists (idempotent)
+		var existing ObjectAttribute
+		err := tx.Where("tenant_id = ? AND name = ?", tenantID, oa.Name).First(&existing).Error
+		if err == nil {
+			// Object attribute already exists, use it
+			*oa = existing
+			return nil // No change needed, skip revision bump
+		}
+		if err != gorm.ErrRecordNotFound {
+			// Some other error occurred
+			return err
+		}
+
+		// Object attribute doesn't exist, create it
 		if err := tx.Create(oa).Error; err != nil {
 			return err
 		}
@@ -102,39 +166,42 @@ func (h *Handler) CreateObjectGroup(ctx context.Context, tenantID uuid.UUID, oa 
 		rev, _ := BumpRevision(tx, tenantID)
 		payload := map[string]any{
 			"oa_id": oa.ID,
-			"name": oa.Name,
+			"name":  oa.Name,
 		}
 		return AppendChange(tx, tenantID, rev, "OA_CREATE", OpAdd, payload)
 	})
 }
 
 // CreateRelationship creates an assignment edge (relationship) and records the change
-func (h *Handler) CreateRelationship(ctx context.Context, tenantID uuid.UUID, edge *AssignmentEdge) (int64, error) {
+func (h *Handler) CreateRelationship(ctx context.Context, tenantID string, edge *AssignmentEdge) (int64, error) {
 	return h.WithPolicyWriteTx(ctx, tenantID, func(tx *gorm.DB) error {
-		// Use existing AddAssignmentEdge which handles validation and change logging
-		// But we need to call it within our transaction
 		edge.TenantID = tenantID
-		
+
 		// Validate
 		if err := validate.ValidateAssignmentEdgeCreate(ctx, tx, tenantID, edge); err != nil {
 			return err
 		}
 
 		// Check if exists
-		var existing AssignmentEdge
-		err := tx.Where("tenant_id = ? AND child_type = ? AND child_id = ? AND parent_type = ? AND parent_id = ?",
-			tenantID, edge.ChildType, edge.ChildID, edge.ParentType, edge.ParentID).
-			First(&existing).Error
-		if err == nil {
+		var count int64
+		err := tx.WithContext(ctx).
+			Table("assignment_edges").
+			Where("tenant_id = ? AND child_type = ? AND child_id = ? AND parent_type = ? AND parent_id = ?",
+				tenantID, edge.ChildType, edge.ChildID, edge.ParentType, edge.ParentID).
+			Count(&count).Error
+		if err != nil {
+			return err
+		}
+		if count > 0 {
 			// Already exists - idempotent
 			return nil
 		}
-		if err != gorm.ErrRecordNotFound {
-			return err
-		}
 
-		// Create
-		if err := tx.Create(edge).Error; err != nil {
+		// Create using raw SQL with PostgreSQL placeholders to avoid GORM index issues
+		insertSQL := `INSERT INTO assignment_edges (id, tenant_id, child_type, child_id, parent_type, parent_id, created_at)
+			VALUES ($1, $2, $3, $4, $5, $6, $7)`
+		if err := tx.WithContext(ctx).Exec(insertSQL,
+			edge.ID, edge.TenantID, string(edge.ChildType), edge.ChildID, string(edge.ParentType), edge.ParentID, edge.CreatedAt).Error; err != nil {
 			return err
 		}
 
@@ -151,7 +218,7 @@ func (h *Handler) CreateRelationship(ctx context.Context, tenantID uuid.UUID, ed
 }
 
 // DeleteRelationship deletes an assignment edge and records the change
-func (h *Handler) DeleteRelationship(ctx context.Context, tenantID uuid.UUID, edge *AssignmentEdge) (int64, error) {
+func (h *Handler) DeleteRelationship(ctx context.Context, tenantID string, edge *AssignmentEdge) (int64, error) {
 	return h.WithPolicyWriteTx(ctx, tenantID, func(tx *gorm.DB) error {
 		// Find and delete
 		result := tx.Where("tenant_id = ? AND child_type = ? AND child_id = ? AND parent_type = ? AND parent_id = ?",
@@ -176,7 +243,7 @@ func (h *Handler) DeleteRelationship(ctx context.Context, tenantID uuid.UUID, ed
 }
 
 // CreateRule creates an association with operations and records the change
-func (h *Handler) CreateRule(ctx context.Context, tenantID uuid.UUID, uaID, oaID uuid.UUID, ops []string) (uuid.UUID, int64, error) {
+func (h *Handler) CreateRule(ctx context.Context, tenantID string, uaID, oaID uuid.UUID, ops []string) (uuid.UUID, int64, error) {
 	var assocID uuid.UUID
 	revision, err := h.WithPolicyWriteTx(ctx, tenantID, func(tx *gorm.DB) error {
 		assoc := Association{
@@ -206,7 +273,7 @@ func (h *Handler) CreateRule(ctx context.Context, tenantID uuid.UUID, uaID, oaID
 		payload := map[string]any{
 			"ua_id": uaID,
 			"oa_id": oaID,
-			"ops": ops,
+			"ops":   ops,
 		}
 		return AppendChange(tx, tenantID, rev, "ASSOC_OP", OpAdd, payload)
 	})
@@ -214,7 +281,7 @@ func (h *Handler) CreateRule(ctx context.Context, tenantID uuid.UUID, uaID, oaID
 }
 
 // DeleteRule deletes an association and records the change
-func (h *Handler) DeleteRule(ctx context.Context, tenantID uuid.UUID, assocID uuid.UUID) (int64, error) {
+func (h *Handler) DeleteRule(ctx context.Context, tenantID string, assocID uuid.UUID) (int64, error) {
 	return h.WithPolicyWriteTx(ctx, tenantID, func(tx *gorm.DB) error {
 		var assoc Association
 		if err := tx.Where("tenant_id = ? AND id = ?", tenantID, assocID).First(&assoc).Error; err != nil {
@@ -244,14 +311,14 @@ func (h *Handler) DeleteRule(ctx context.Context, tenantID uuid.UUID, assocID uu
 		payload := map[string]any{
 			"ua_id": assoc.UserAttributeID,
 			"oa_id": assoc.ObjectAttributeID,
-			"ops": operations,
+			"ops":   operations,
 		}
 		return AppendChange(tx, tenantID, rev, "ASSOC_OP", OpRemove, payload)
 	})
 }
 
 // CreateDeny creates a prohibition with operations and records the change
-func (h *Handler) CreateDeny(ctx context.Context, tenantID uuid.UUID, subjectType ProhibitionSubjectType, subjectID uuid.UUID, oaID uuid.UUID, ops []string) (uuid.UUID, int64, error) {
+func (h *Handler) CreateDeny(ctx context.Context, tenantID string, subjectType ProhibitionSubjectType, subjectID uuid.UUID, oaID uuid.UUID, ops []string) (uuid.UUID, int64, error) {
 	var prohID uuid.UUID
 	revision, err := h.WithPolicyWriteTx(ctx, tenantID, func(tx *gorm.DB) error {
 		proh := Prohibition{
@@ -290,8 +357,17 @@ func (h *Handler) CreateDeny(ctx context.Context, tenantID uuid.UUID, subjectTyp
 	return prohID, revision, err
 }
 
+// Backward compatibility aliases
+func (h *Handler) CreateSubjectGroup(ctx context.Context, tenantID string, ua *UserAttribute) (int64, error) {
+	return h.CreateSubjectSet(ctx, tenantID, ua)
+}
+
+func (h *Handler) CreateObjectGroup(ctx context.Context, tenantID string, oa *ObjectAttribute) (int64, error) {
+	return h.CreateObjectSet(ctx, tenantID, oa)
+}
+
 // DeleteDeny deletes a prohibition and records the change
-func (h *Handler) DeleteDeny(ctx context.Context, tenantID uuid.UUID, prohID uuid.UUID) (int64, error) {
+func (h *Handler) DeleteDeny(ctx context.Context, tenantID string, prohID uuid.UUID) (int64, error) {
 	return h.WithPolicyWriteTx(ctx, tenantID, func(tx *gorm.DB) error {
 		var proh Prohibition
 		if err := tx.Where("tenant_id = ? AND id = ?", tenantID, prohID).First(&proh).Error; err != nil {
@@ -329,7 +405,7 @@ func (h *Handler) DeleteDeny(ctx context.Context, tenantID uuid.UUID, prohID uui
 }
 
 // GetCurrentRevision returns the current policy revision for a tenant
-func (h *Handler) GetCurrentRevision(ctx context.Context, tenantID uuid.UUID) (int64, error) {
+func (h *Handler) GetCurrentRevision(ctx context.Context, tenantID string) (int64, error) {
 	var rev PolicyRevision
 	if err := h.H.WithContext(ctx).Where("tenant_id = ?", tenantID).First(&rev).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
@@ -341,7 +417,7 @@ func (h *Handler) GetCurrentRevision(ctx context.Context, tenantID uuid.UUID) (i
 }
 
 // GetPolicyChanges returns policy changes for a tenant after a given sequence
-func (h *Handler) GetPolicyChanges(ctx context.Context, tenantID uuid.UUID, afterSeq int64, limit int) ([]PolicyChange, error) {
+func (h *Handler) GetPolicyChanges(ctx context.Context, tenantID string, afterSeq int64, limit int) ([]PolicyChange, error) {
 	if limit <= 0 || limit > 1000 {
 		limit = 100 // Default limit
 	}
@@ -353,4 +429,3 @@ func (h *Handler) GetPolicyChanges(ctx context.Context, tenantID uuid.UUID, afte
 		Find(&changes).Error
 	return changes, err
 }
-

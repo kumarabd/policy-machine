@@ -46,6 +46,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/signal"
@@ -54,9 +55,10 @@ import (
 	"github.com/kumarabd/gokit/logger"
 	"github.com/kumarabd/policy-machine/internal/config"
 	"github.com/kumarabd/policy-machine/internal/metrics"
-	"github.com/kumarabd/policy-machine/pkg/engine"
 	"github.com/kumarabd/policy-machine/internal/postgres"
+	"github.com/kumarabd/policy-machine/internal/seed"
 	"github.com/kumarabd/policy-machine/internal/server"
+	"github.com/kumarabd/policy-machine/pkg/engine"
 )
 
 // main is the entry point of the application
@@ -84,11 +86,25 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Initialize database handler
+	// Initialize database handler with default tenant ID from engine config
+	if configHandler.Postgres == nil {
+		configHandler.Postgres = &postgres.Options{}
+	}
+	configHandler.Postgres.DefaultTenantID = configHandler.Engine.TenantID
 	dbHandler, err := postgres.New(configHandler.Postgres)
 	if err != nil {
 		log.Error().Err(err).Msg("database initialization failed")
 		os.Exit(1)
+	}
+
+	// Seed database with initial data if tenant ID is provided
+	if configHandler.Engine.TenantID != "" {
+		ctx := context.Background()
+		if err := seed.Seed(ctx, dbHandler, configHandler.Engine.TenantID); err != nil {
+			log.Warn().Err(err).Msg("failed to seed database - continuing anyway")
+		} else {
+			log.Info().Msg("database seeded successfully")
+		}
 	}
 
 	// Initialize a new engine with the logger, metrics handler, database handler, and engine configuration

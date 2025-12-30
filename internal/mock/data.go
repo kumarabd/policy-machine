@@ -9,12 +9,12 @@ import (
 
 // MockData contains all mock data for the API
 type MockData struct {
-	TenantID      uuid.UUID
+	TenantID      string
 	Revision      int64
 	Subjects      []api.Subject
-	SubjectGroups []api.SubjectGroup
+	SubjectGroups []api.SubjectSet
 	Objects       []api.Object
-	ObjectGroups  []api.ObjectGroup
+	ObjectGroups  []api.ObjectSet
 	Relationships []api.Relationship
 	Rules         []api.Rule
 	Denies        []api.Deny
@@ -23,7 +23,7 @@ type MockData struct {
 
 var (
 	// DefaultTenantID is the default tenant for mock data
-	DefaultTenantID = uuid.MustParse("00000000-0000-0000-0000-000000000001")
+	DefaultTenantID = "test"
 
 	// MockDataStore holds the mock data
 	MockDataStore = &MockData{
@@ -269,13 +269,13 @@ var (
 				CreatedAt: time.Now().Add(-45 * 24 * time.Hour),
 			},
 		},
-		SubjectGroups: []api.SubjectGroup{
+		SubjectGroups: []api.SubjectSet{
 			{
-				ID:              uuid.MustParse("20000000-0000-0000-0000-000000000001"),
-				Name:            "Engineering Team",
-				Description:     "All engineering team members",
-				ScopeID:         nil,
-				Tags:            []string{"engineering", "dev"},
+				ID:          uuid.MustParse("20000000-0000-0000-0000-000000000001"),
+				Name:        "Engineering Team",
+				Description: "All engineering team members",
+				ScopeID:     nil,
+				Tags:        []string{"engineering", "dev"},
 				MemberSubjectIDs: []uuid.UUID{
 					uuid.MustParse("10000000-0000-0000-0000-000000000001"),
 					uuid.MustParse("10000000-0000-0000-0000-000000000002"),
@@ -290,11 +290,11 @@ var (
 				UpdatedAt: nil,
 			},
 			{
-				ID:              uuid.MustParse("20000000-0000-0000-0000-000000000002"),
-				Name:            "Backend Developers",
-				Description:     "Backend engineering team",
-				ScopeID:         nil,
-				Tags:            []string{"engineering", "backend"},
+				ID:          uuid.MustParse("20000000-0000-0000-0000-000000000002"),
+				Name:        "Backend Developers",
+				Description: "Backend engineering team",
+				ScopeID:     nil,
+				Tags:        []string{"engineering", "backend"},
 				MemberSubjectIDs: []uuid.UUID{
 					uuid.MustParse("10000000-0000-0000-0000-000000000001"),
 					uuid.MustParse("10000000-0000-0000-0000-000000000009"),
@@ -304,11 +304,11 @@ var (
 				UpdatedAt: nil,
 			},
 			{
-				ID:              uuid.MustParse("20000000-0000-0000-0000-000000000003"),
-				Name:            "Frontend Developers",
-				Description:     "Frontend engineering team",
-				ScopeID:         nil,
-				Tags:            []string{"engineering", "frontend"},
+				ID:          uuid.MustParse("20000000-0000-0000-0000-000000000003"),
+				Name:        "Frontend Developers",
+				Description: "Frontend engineering team",
+				ScopeID:     nil,
+				Tags:        []string{"engineering", "frontend"},
 				MemberSubjectIDs: []uuid.UUID{
 					uuid.MustParse("10000000-0000-0000-0000-000000000002"),
 				},
@@ -316,11 +316,11 @@ var (
 				UpdatedAt: nil,
 			},
 			{
-				ID:              uuid.MustParse("20000000-0000-0000-0000-000000000004"),
-				Name:            "Management",
-				Description:     "All managers and directors",
-				ScopeID:         nil,
-				Tags:            []string{"management", "leadership"},
+				ID:          uuid.MustParse("20000000-0000-0000-0000-000000000004"),
+				Name:        "Management",
+				Description: "All managers and directors",
+				ScopeID:     nil,
+				Tags:        []string{"management", "leadership"},
 				MemberSubjectIDs: []uuid.UUID{
 					uuid.MustParse("10000000-0000-0000-0000-000000000003"),
 					uuid.MustParse("10000000-0000-0000-0000-000000000006"),
@@ -331,11 +331,11 @@ var (
 				UpdatedAt: nil,
 			},
 			{
-				ID:              uuid.MustParse("20000000-0000-0000-0000-000000000005"),
-				Name:            "Operations Team",
-				Description:     "DevOps and SRE team members",
-				ScopeID:         nil,
-				Tags:            []string{"operations", "sre", "devops"},
+				ID:          uuid.MustParse("20000000-0000-0000-0000-000000000005"),
+				Name:        "Operations Team",
+				Description: "DevOps and SRE team members",
+				ScopeID:     nil,
+				Tags:        []string{"operations", "sre", "devops"},
 				MemberSubjectIDs: []uuid.UUID{
 					uuid.MustParse("10000000-0000-0000-0000-000000000004"),
 					uuid.MustParse("10000000-0000-0000-0000-000000000007"),
@@ -345,11 +345,11 @@ var (
 				UpdatedAt: nil,
 			},
 			{
-				ID:              uuid.MustParse("20000000-0000-0000-0000-000000000006"),
-				Name:            "Security Team",
-				Description:     "Security engineers and analysts",
-				ScopeID:         nil,
-				Tags:            []string{"security", "compliance"},
+				ID:          uuid.MustParse("20000000-0000-0000-0000-000000000006"),
+				Name:        "Security Team",
+				Description: "Security engineers and analysts",
+				ScopeID:     nil,
+				Tags:        []string{"security", "compliance"},
 				MemberSubjectIDs: []uuid.UUID{
 					uuid.MustParse("10000000-0000-0000-0000-000000000005"),
 					uuid.MustParse("10000000-0000-0000-0000-000000000008"),
@@ -367,10 +367,10 @@ var (
 				DisplayName: "Customer Portal - Product Requirements",
 				Kind:        "document",
 				Attributes: map[string]string{
-					"category":  "requirements",
-					"status":    "approved",
-					"owner":     "karen.anderson@acme.com",
-					"version":   "v2.1",
+					"category": "requirements",
+					"status":   "approved",
+					"owner":    "karen.anderson@acme.com",
+					"version":  "v2.1",
 					"doc_type": "PRD",
 				},
 				Tags:      []string{"product", "requirements", "customer-portal"},
@@ -383,10 +383,10 @@ var (
 				DisplayName: "API Design Specification v3",
 				Kind:        "document",
 				Attributes: map[string]string{
-					"category":  "specification",
-					"status":    "review",
-					"owner":     "bob.smith@acme.com",
-					"version":   "v3.0",
+					"category": "specification",
+					"status":   "review",
+					"owner":    "bob.smith@acme.com",
+					"version":  "v3.0",
 					"doc_type": "API_SPEC",
 				},
 				Tags:      []string{"api", "design", "specification", "openapi"},
@@ -415,9 +415,9 @@ var (
 				DisplayName: "policy-engine",
 				Kind:        "repository",
 				Attributes: map[string]string{
-					"language":   "go",
-					"visibility": "private",
-					"owner":       "david.brown@acme.com",
+					"language":       "go",
+					"visibility":     "private",
+					"owner":          "david.brown@acme.com",
 					"default_branch": "main",
 				},
 				Tags:      []string{"repository", "backend", "go", "authorization"},
@@ -430,10 +430,10 @@ var (
 				DisplayName: "Production Database Credentials",
 				Kind:        "secret",
 				Attributes: map[string]string{
-					"type":      "database",
-					"env":       "production",
-					"managed":   "vault",
-					"rotation":  "30d",
+					"type":         "database",
+					"env":          "production",
+					"managed":      "vault",
+					"rotation":     "30d",
 					"last_rotated": "2024-01-01",
 				},
 				Tags:      []string{"secret", "credentials", "database", "production"},
@@ -461,9 +461,9 @@ var (
 				DisplayName: "frontend-app",
 				Kind:        "repository",
 				Attributes: map[string]string{
-					"language":   "typescript",
-					"visibility": "private",
-					"owner":       "bob.smith@acme.com",
+					"language":       "typescript",
+					"visibility":     "private",
+					"owner":          "bob.smith@acme.com",
 					"default_branch": "main",
 				},
 				Tags:      []string{"repository", "frontend", "react", "typescript"},
@@ -476,10 +476,10 @@ var (
 				DisplayName: "AWS Access Key - Production",
 				Kind:        "secret",
 				Attributes: map[string]string{
-					"type":      "aws",
-					"env":       "production",
-					"managed":   "vault",
-					"rotation":  "90d",
+					"type":         "aws",
+					"env":          "production",
+					"managed":      "vault",
+					"rotation":     "90d",
 					"last_rotated": "2024-01-15",
 				},
 				Tags:      []string{"secret", "aws", "credentials", "production"},
@@ -507,11 +507,11 @@ var (
 				DisplayName: "Security Policy & Procedures",
 				Kind:        "document",
 				Attributes: map[string]string{
-					"category":  "policy",
-					"status":    "published",
-					"owner":      "henry.wilson@acme.com",
-					"version":   "v1.0",
-					"doc_type":  "POLICY",
+					"category": "policy",
+					"status":   "published",
+					"owner":    "henry.wilson@acme.com",
+					"version":  "v1.0",
+					"doc_type": "POLICY",
 				},
 				Tags:      []string{"security", "policy", "compliance", "soc2"},
 				CreatedAt: time.Now().Add(-180 * 24 * time.Hour),
@@ -539,9 +539,9 @@ var (
 				DisplayName: "data-pipeline",
 				Kind:        "repository",
 				Attributes: map[string]string{
-					"language":   "python",
-					"visibility": "private",
-					"owner":       "lisa.chen@acme.com",
+					"language":       "python",
+					"visibility":     "private",
+					"owner":          "lisa.chen@acme.com",
 					"default_branch": "main",
 				},
 				Tags:      []string{"repository", "data", "python", "spark"},
@@ -554,10 +554,10 @@ var (
 				DisplayName: "GitHub Personal Access Token",
 				Kind:        "secret",
 				Attributes: map[string]string{
-					"type":      "github",
-					"env":       "all",
-					"managed":   "vault",
-					"rotation":  "180d",
+					"type":         "github",
+					"env":          "all",
+					"managed":      "vault",
+					"rotation":     "180d",
 					"last_rotated": "2024-01-01",
 				},
 				Tags:      []string{"secret", "github", "ci-cd"},
@@ -585,11 +585,11 @@ var (
 				DisplayName: "ADR-001: Microservices Architecture",
 				Kind:        "document",
 				Attributes: map[string]string{
-					"category":  "architecture",
-					"status":    "approved",
-					"owner":     "frank.miller@acme.com",
-					"version":   "v1.0",
-					"doc_type":  "ADR",
+					"category": "architecture",
+					"status":   "approved",
+					"owner":    "frank.miller@acme.com",
+					"version":  "v1.0",
+					"doc_type": "ADR",
 				},
 				Tags:      []string{"architecture", "adr", "microservices", "decision"},
 				CreatedAt: time.Now().Add(-90 * 24 * time.Hour),
@@ -601,9 +601,9 @@ var (
 				DisplayName: "mobile-app-ios",
 				Kind:        "repository",
 				Attributes: map[string]string{
-					"language":   "swift",
-					"visibility": "private",
-					"owner":       "oscar.kim@acme.com",
+					"language":       "swift",
+					"visibility":     "private",
+					"owner":          "oscar.kim@acme.com",
 					"default_branch": "main",
 				},
 				Tags:      []string{"repository", "mobile", "ios", "swift"},
@@ -616,10 +616,10 @@ var (
 				DisplayName: "Slack Webhook - Production",
 				Kind:        "secret",
 				Attributes: map[string]string{
-					"type":      "slack",
-					"env":       "production",
-					"managed":   "vault",
-					"rotation":  "never",
+					"type":     "slack",
+					"env":      "production",
+					"managed":  "vault",
+					"rotation": "never",
 				},
 				Tags:      []string{"secret", "slack", "webhook", "notifications"},
 				CreatedAt: time.Now().Add(-100 * 24 * time.Hour),
@@ -662,23 +662,23 @@ var (
 				DisplayName: "Incident Response Runbook",
 				Kind:        "document",
 				Attributes: map[string]string{
-					"category":  "runbook",
-					"status":    "published",
-					"owner":      "mike.rodriguez@acme.com",
-					"version":   "v2.3",
-					"doc_type":  "RUNBOOK",
+					"category": "runbook",
+					"status":   "published",
+					"owner":    "mike.rodriguez@acme.com",
+					"version":  "v2.3",
+					"doc_type": "RUNBOOK",
 				},
 				Tags:      []string{"runbook", "incident", "sre", "oncall"},
 				CreatedAt: time.Now().Add(-60 * 24 * time.Hour),
 			},
 		},
-		ObjectGroups: []api.ObjectGroup{
+		ObjectGroups: []api.ObjectSet{
 			{
-				ID:            uuid.MustParse("40000000-0000-0000-0000-000000000001"),
-				Name:          "Public Documents",
-				Description:   "Publicly accessible documents",
-				ScopeID:       nil,
-				Tags:          []string{"public", "documents"},
+				ID:          uuid.MustParse("40000000-0000-0000-0000-000000000001"),
+				Name:        "Public Documents",
+				Description: "Publicly accessible documents",
+				ScopeID:     nil,
+				Tags:        []string{"public", "documents"},
 				MemberObjectIDs: []uuid.UUID{
 					uuid.MustParse("30000000-0000-0000-0000-000000000001"),
 					uuid.MustParse("30000000-0000-0000-0000-000000000010"),
@@ -688,11 +688,11 @@ var (
 				UpdatedAt: nil,
 			},
 			{
-				ID:            uuid.MustParse("40000000-0000-0000-0000-000000000002"),
-				Name:          "Private Documents",
-				Description:   "Private documents requiring access control",
-				ScopeID:       nil,
-				Tags:          []string{"private", "documents"},
+				ID:          uuid.MustParse("40000000-0000-0000-0000-000000000002"),
+				Name:        "Private Documents",
+				Description: "Private documents requiring access control",
+				ScopeID:     nil,
+				Tags:        []string{"private", "documents"},
 				MemberObjectIDs: []uuid.UUID{
 					uuid.MustParse("30000000-0000-0000-0000-000000000002"),
 					uuid.MustParse("30000000-0000-0000-0000-000000000020"),
@@ -701,11 +701,11 @@ var (
 				UpdatedAt: nil,
 			},
 			{
-				ID:            uuid.MustParse("40000000-0000-0000-0000-000000000003"),
-				Name:          "Active Projects",
-				Description:   "Currently active project resources",
-				ScopeID:       nil,
-				Tags:          []string{"projects", "active"},
+				ID:          uuid.MustParse("40000000-0000-0000-0000-000000000003"),
+				Name:        "Active Projects",
+				Description: "Currently active project resources",
+				ScopeID:     nil,
+				Tags:        []string{"projects", "active"},
 				MemberObjectIDs: []uuid.UUID{
 					uuid.MustParse("30000000-0000-0000-0000-000000000003"),
 					uuid.MustParse("30000000-0000-0000-0000-000000000011"),
@@ -715,11 +715,11 @@ var (
 				UpdatedAt: nil,
 			},
 			{
-				ID:            uuid.MustParse("40000000-0000-0000-0000-000000000004"),
-				Name:          "Code Repositories",
-				Description:   "All code repositories",
-				ScopeID:       nil,
-				Tags:          []string{"repositories", "code"},
+				ID:          uuid.MustParse("40000000-0000-0000-0000-000000000004"),
+				Name:        "Code Repositories",
+				Description: "All code repositories",
+				ScopeID:     nil,
+				Tags:        []string{"repositories", "code"},
 				MemberObjectIDs: []uuid.UUID{
 					uuid.MustParse("30000000-0000-0000-0000-000000000004"),
 					uuid.MustParse("30000000-0000-0000-0000-000000000007"),
@@ -730,11 +730,11 @@ var (
 				UpdatedAt: nil,
 			},
 			{
-				ID:            uuid.MustParse("40000000-0000-0000-0000-000000000005"),
-				Name:          "Production Secrets",
-				Description:   "Secrets used in production environment",
-				ScopeID:       nil,
-				Tags:          []string{"secrets", "production"},
+				ID:          uuid.MustParse("40000000-0000-0000-0000-000000000005"),
+				Name:        "Production Secrets",
+				Description: "Secrets used in production environment",
+				ScopeID:     nil,
+				Tags:        []string{"secrets", "production"},
 				MemberObjectIDs: []uuid.UUID{
 					uuid.MustParse("30000000-0000-0000-0000-000000000005"),
 					uuid.MustParse("30000000-0000-0000-0000-000000000008"),
@@ -744,11 +744,11 @@ var (
 				UpdatedAt: nil,
 			},
 			{
-				ID:            uuid.MustParse("40000000-0000-0000-0000-000000000006"),
-				Name:          "Public APIs",
-				Description:   "Publicly accessible API endpoints",
-				ScopeID:       nil,
-				Tags:          []string{"api", "public"},
+				ID:          uuid.MustParse("40000000-0000-0000-0000-000000000006"),
+				Name:        "Public APIs",
+				Description: "Publicly accessible API endpoints",
+				ScopeID:     nil,
+				Tags:        []string{"api", "public"},
 				MemberObjectIDs: []uuid.UUID{
 					uuid.MustParse("30000000-0000-0000-0000-000000000006"),
 					uuid.MustParse("30000000-0000-0000-0000-000000000014"),
@@ -757,11 +757,11 @@ var (
 				UpdatedAt: nil,
 			},
 			{
-				ID:            uuid.MustParse("40000000-0000-0000-0000-000000000007"),
-				Name:          "Internal APIs",
-				Description:   "Internal API endpoints",
-				ScopeID:       nil,
-				Tags:          []string{"api", "internal"},
+				ID:          uuid.MustParse("40000000-0000-0000-0000-000000000007"),
+				Name:        "Internal APIs",
+				Description: "Internal API endpoints",
+				ScopeID:     nil,
+				Tags:        []string{"api", "internal"},
 				MemberObjectIDs: []uuid.UUID{
 					uuid.MustParse("30000000-0000-0000-0000-000000000009"),
 					uuid.MustParse("30000000-0000-0000-0000-000000000018"),
@@ -922,9 +922,9 @@ func ResetMockData() {
 		TenantID:      DefaultTenantID,
 		Revision:      42,
 		Subjects:      make([]api.Subject, 0),
-		SubjectGroups: make([]api.SubjectGroup, 0),
+		SubjectGroups: make([]api.SubjectSet, 0),
 		Objects:       make([]api.Object, 0),
-		ObjectGroups:  make([]api.ObjectGroup, 0),
+		ObjectGroups:  make([]api.ObjectSet, 0),
 		Relationships: make([]api.Relationship, 0),
 		Rules:         make([]api.Rule, 0),
 		Denies:        make([]api.Deny, 0),

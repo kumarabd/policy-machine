@@ -6,7 +6,7 @@ import (
 )
 
 type Snapshot struct {
-	TenantID uuid.UUID
+	TenantID string
 	Version  int64 // revision
 	LastSeq  int64 // last applied outbox seq
 

@@ -10,16 +10,16 @@ import (
 
 // AssignmentEdge interface to avoid import cycle
 type AssignmentEdge interface {
-	GetTenantID() uuid.UUID
+	GetTenantID() string
 	GetChildType() string
 	GetChildID() uuid.UUID
 	GetParentType() string
 	GetParentID() uuid.UUID
-	SetTenantID(uuid.UUID)
+	SetTenantID(string)
 }
 
 // ValidateAssignmentEdgeCreate validates an assignment edge before creation
-func ValidateAssignmentEdgeCreate(ctx context.Context, tx *gorm.DB, tenantID uuid.UUID, edge AssignmentEdge) error {
+func ValidateAssignmentEdgeCreate(ctx context.Context, tx *gorm.DB, tenantID string, edge AssignmentEdge) error {
 	// Ensure tenant ID is set
 	edge.SetTenantID(tenantID)
 
@@ -111,4 +111,3 @@ func ValidateEdgeType(edge AssignmentEdge) error {
 
 	return nil
 }
-

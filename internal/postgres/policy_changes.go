@@ -4,13 +4,12 @@ import (
 	"context"
 	"encoding/json"
 
-	"github.com/google/uuid"
 	"github.com/kumarabd/policy-machine/internal/validate"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
 
-func BumpRevision(tx *gorm.DB, tenantID uuid.UUID) (int64, error) {
+func BumpRevision(tx *gorm.DB, tenantID string) (int64, error) {
 	rev := PolicyRevision{TenantID: tenantID}
 
 	// Upsert: increment revision atomically
@@ -28,7 +27,7 @@ func BumpRevision(tx *gorm.DB, tenantID uuid.UUID) (int64, error) {
 	return rev.Revision, nil
 }
 
-func AppendChange(tx *gorm.DB, tenantID uuid.UUID, revision int64, kind string, op ChangeOp, payload any) error {
+func AppendChange(tx *gorm.DB, tenantID string, revision int64, kind string, op ChangeOp, payload any) error {
 	b, err := json.Marshal(payload)
 	if err != nil {
 		return err
@@ -44,7 +43,7 @@ func AppendChange(tx *gorm.DB, tenantID uuid.UUID, revision int64, kind string, 
 }
 
 // AddAssignmentEdge creates an assignment edge with validation
-func AddAssignmentEdge(ctx context.Context, db *gorm.DB, tenantID uuid.UUID, edge AssignmentEdge) error {
+func AddAssignmentEdge(ctx context.Context, db *gorm.DB, tenantID string, edge AssignmentEdge) error {
 	return db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		// Validate before inserting
 		if err := validate.ValidateAssignmentEdgeCreate(ctx, tx, tenantID, &edge); err != nil {
@@ -85,4 +84,3 @@ func AddAssignmentEdge(ctx context.Context, db *gorm.DB, tenantID uuid.UUID, edg
 		return AppendChange(tx, tenantID, rev, "ASSIGNMENT_EDGE", OpAdd, payload)
 	})
 }
-

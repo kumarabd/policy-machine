@@ -406,7 +406,7 @@ func ListSubjectGroups(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	var filtered []api.SubjectGroup
+	var filtered []api.SubjectSet
 	for _, sg := range data.SubjectGroups {
 		if query == "" || matchesQuery(sg.Name, query) {
 			filtered = append(filtered, sg)
@@ -474,7 +474,7 @@ func CreateSubjectGroup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	newGroup := api.SubjectGroup{
+	newGroup := api.SubjectSet{
 		ID:        uuid.New(),
 		Name:      req.Name,
 		CreatedAt: time.Now(),
@@ -693,7 +693,7 @@ func ListObjectGroups(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	var filtered []api.ObjectGroup
+	var filtered []api.ObjectSet
 	for _, og := range data.ObjectGroups {
 		if query == "" || matchesQuery(og.Name, query) {
 			filtered = append(filtered, og)
@@ -722,7 +722,7 @@ func ListObjectGroups(w http.ResponseWriter, r *http.Request) {
 		nextCursor = &cursor
 	}
 
-	response := api.SearchResponse[api.ObjectGroup]{
+	response := api.SearchResponse[api.ObjectSet]{
 		Items:      filtered,
 		NextCursor: nextCursor,
 		Total:      &total,
@@ -1105,7 +1105,7 @@ func CreateObjectGroup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	newGroup := api.ObjectGroup{
+	newGroup := api.ObjectSet{
 		ID:        uuid.New(),
 		Name:      req.Name,
 		CreatedAt: time.Now(),

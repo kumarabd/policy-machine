@@ -9,7 +9,7 @@ import (
 )
 
 // ValidateNodeExistence ensures all referenced nodes exist in the database
-func ValidateNodeExistence(ctx context.Context, tx *gorm.DB, tenantID uuid.UUID, edge AssignmentEdge) error {
+func ValidateNodeExistence(ctx context.Context, tx *gorm.DB, tenantID string, edge AssignmentEdge) error {
 	// Validate child node
 	if err := validateNode(ctx, tx, tenantID, edge.GetChildType(), edge.GetChildID()); err != nil {
 		return err
@@ -23,7 +23,7 @@ func ValidateNodeExistence(ctx context.Context, tx *gorm.DB, tenantID uuid.UUID,
 	return nil
 }
 
-func validateNode(ctx context.Context, tx *gorm.DB, tenantID uuid.UUID, nodeType string, nodeID uuid.UUID) error {
+func validateNode(ctx context.Context, tx *gorm.DB, tenantID string, nodeType string, nodeID uuid.UUID) error {
 	switch nodeType {
 	case "UA":
 		var count int64
@@ -90,4 +90,3 @@ func validateNode(ctx context.Context, tx *gorm.DB, tenantID uuid.UUID, nodeType
 
 	return nil
 }
-

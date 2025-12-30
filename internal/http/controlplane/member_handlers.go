@@ -6,10 +6,10 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
-	"github.com/kumarabd/policy-machine/pkg/api"
+	httputil "github.com/kumarabd/policy-machine/internal/http"
 	"github.com/kumarabd/policy-machine/internal/mock"
 	"github.com/kumarabd/policy-machine/internal/postgres"
-	httputil "github.com/kumarabd/policy-machine/internal/http"
+	"github.com/kumarabd/policy-machine/pkg/api"
 )
 
 // AddSubjectSetMembers adds members to a subject set
@@ -80,19 +80,23 @@ func (s *Server) AddSubjectSetMembers(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Fetch updated subject set
-	ua, err := s.engine.GetDB().GetSubjectGroup(r.Context(), tenantID, setID)
+	ua, err := s.engine.GetDB().GetSubjectSet(r.Context(), tenantID, setID)
 	if err != nil {
 		httputil.RespondError(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return
 	}
 
-	// Get member IDs (would need to query assignment edges)
-	memberIDs := []uuid.UUID{} // TODO: Query actual members
+	// Get member IDs from assignment edges
+	memberIDs, err := s.engine.GetDB().GetSubjectSetMembers(r.Context(), tenantID, setID)
+	if err != nil {
+		httputil.RespondError(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
+		return
+	}
 
 	response := api.SubjectSet{
 		ID:               ua.ID,
 		Name:             ua.Name,
-		Description:      "", // TODO: Get from DB if available
+		Description:      "", // Description not stored in UserAttribute table
 		ScopeID:          nil,
 		Tags:             []string{},
 		MemberSubjectIDs: memberIDs,
@@ -165,13 +169,18 @@ func (s *Server) RemoveSubjectSetMember(w http.ResponseWriter, r *http.Request) 
 	}
 
 	// Fetch updated subject set
-	ua, err := s.engine.GetDB().GetSubjectGroup(r.Context(), tenantID, setID)
+	ua, err := s.engine.GetDB().GetSubjectSet(r.Context(), tenantID, setID)
 	if err != nil {
 		httputil.RespondError(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return
 	}
 
-	memberIDs := []uuid.UUID{} // TODO: Query actual members
+	// Get member IDs from assignment edges
+	memberIDs, err := s.engine.GetDB().GetSubjectSetMembers(r.Context(), tenantID, setID)
+	if err != nil {
+		httputil.RespondError(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
+		return
+	}
 
 	response := api.SubjectSet{
 		ID:               ua.ID,
@@ -256,13 +265,18 @@ func (s *Server) AddObjectSetMembers(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Fetch updated object set
-	oa, err := s.engine.GetDB().GetObjectGroup(r.Context(), tenantID, setID)
+	oa, err := s.engine.GetDB().GetObjectSet(r.Context(), tenantID, setID)
 	if err != nil {
 		httputil.RespondError(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return
 	}
 
-	memberIDs := []uuid.UUID{} // TODO: Query actual members
+	// Get member IDs from assignment edges
+	memberIDs, err := s.engine.GetDB().GetObjectSetMembers(r.Context(), tenantID, setID)
+	if err != nil {
+		httputil.RespondError(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
+		return
+	}
 
 	response := api.ObjectSet{
 		ID:              oa.ID,
@@ -340,13 +354,18 @@ func (s *Server) RemoveObjectSetMember(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Fetch updated object set
-	oa, err := s.engine.GetDB().GetObjectGroup(r.Context(), tenantID, setID)
+	oa, err := s.engine.GetDB().GetObjectSet(r.Context(), tenantID, setID)
 	if err != nil {
 		httputil.RespondError(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return
 	}
 
-	memberIDs := []uuid.UUID{} // TODO: Query actual members
+	// Get member IDs from assignment edges
+	memberIDs, err := s.engine.GetDB().GetObjectSetMembers(r.Context(), tenantID, setID)
+	if err != nil {
+		httputil.RespondError(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
+		return
+	}
 
 	response := api.ObjectSet{
 		ID:              oa.ID,

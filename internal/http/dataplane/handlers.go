@@ -8,9 +8,9 @@ import (
 
 	"github.com/RoaringBitmap/roaring"
 	"github.com/google/uuid"
-	"github.com/kumarabd/policy-machine/pkg/api"
 	httputil "github.com/kumarabd/policy-machine/internal/http"
 	"github.com/kumarabd/policy-machine/internal/mock"
+	"github.com/kumarabd/policy-machine/pkg/api"
 )
 
 // Authorize handles authorization requests
@@ -88,18 +88,35 @@ func (s *Server) AuthorizeExplain(w http.ResponseWriter, r *http.Request) {
 	uaClosure := s.engine.UserUAClosure(snap, req.UserID)
 	oaClosure := s.engine.ObjectOAClosure(snap, req.ObjectID)
 
-	// Get allow/deny sets
-	allowSet := s.engine.AllowedFor(snap, req.UserID, req.Operation, uaClosure)
-	denySet := s.engine.DeniedFor(snap, req.UserID, req.Operation, uaClosure)
+	// Get allow/deny sets with matches
+	allowSet, uaOAMatches := s.engine.AllowedForWithMatches(snap, req.UserID, req.Operation, uaClosure)
+	denySet, userDenyMatches, uaDenyMatches := s.engine.DeniedForWithMatches(snap, req.UserID, req.Operation, uaClosure)
 
 	// Convert bitmaps to UUID lists
 	subjectClosure := bitmapToUUIDs(uaClosure, snap.UAByIdx())
 	objectClosure := bitmapToUUIDs(oaClosure, snap.OAByIdx())
 
-	// For allow/deny hits, we'd need to track which associations/prohibitions matched
-	// For now, return empty lists
-	allowHits := []uuid.UUID{}
-	denyHits := []uuid.UUID{}
+	// Query database to get association IDs that matched
+	associations, err := s.engine.GetDB().GetAssociationsByUAOA(r.Context(), tenantID, uaOAMatches, req.Operation)
+	if err != nil {
+		httputil.RespondError(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
+		return
+	}
+	allowHits := make([]uuid.UUID, len(associations))
+	for i, assoc := range associations {
+		allowHits[i] = assoc.ID
+	}
+
+	// Query database to get prohibition IDs that matched
+	prohibitions, err := s.engine.GetDB().GetProhibitionsBySubjectOA(r.Context(), tenantID, userDenyMatches, uaDenyMatches, req.Operation)
+	if err != nil {
+		httputil.RespondError(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
+		return
+	}
+	denyHits := make([]uuid.UUID, len(prohibitions))
+	for i, proh := range prohibitions {
+		denyHits[i] = proh.ID
+	}
 
 	// Compute final decision
 	effectiveAllow := roaring.And(allowSet, oaClosure)
@@ -180,13 +197,31 @@ func (s *Server) Evaluate(w http.ResponseWriter, r *http.Request) {
 		uaClosure := s.engine.UserUAClosure(snap, subjectID)
 		oaClosure := s.engine.ObjectOAClosure(snap, objectID)
 
-		// Get allow/deny sets
-		allowSet := s.engine.AllowedFor(snap, subjectID, req.Action, uaClosure)
-		denySet := s.engine.DeniedFor(snap, subjectID, req.Action, uaClosure)
+		// Get allow/deny sets with matches
+		allowSet, uaOAMatches := s.engine.AllowedForWithMatches(snap, subjectID, req.Action, uaClosure)
+		denySet, userDenyMatches, uaDenyMatches := s.engine.DeniedForWithMatches(snap, subjectID, req.Action, uaClosure)
 
-		// For allow/deny hits, we'd need to track which associations/prohibitions matched
-		allowHits := []uuid.UUID{}
-		denyHits := []uuid.UUID{}
+		// Query database to get association IDs that matched
+		associations, err := s.engine.GetDB().GetAssociationsByUAOA(r.Context(), tenantID, uaOAMatches, req.Action)
+		if err != nil {
+			httputil.RespondError(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
+			return
+		}
+		allowHits := make([]uuid.UUID, len(associations))
+		for i, assoc := range associations {
+			allowHits[i] = assoc.ID
+		}
+
+		// Query database to get prohibition IDs that matched
+		prohibitions, err := s.engine.GetDB().GetProhibitionsBySubjectOA(r.Context(), tenantID, userDenyMatches, uaDenyMatches, req.Action)
+		if err != nil {
+			httputil.RespondError(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
+			return
+		}
+		denyHits := make([]uuid.UUID, len(prohibitions))
+		for i, proh := range prohibitions {
+			denyHits[i] = proh.ID
+		}
 
 		// Compute final decision
 		effectiveAllow := roaring.And(allowSet, oaClosure)
@@ -198,14 +233,33 @@ func (s *Server) Evaluate(w http.ResponseWriter, r *http.Request) {
 			decision = "ALLOW"
 		}
 
-		// Build trace
+		// Build trace with matched rules and denies
 		trace := &api.ExplainTrace{}
 		trace.Summary.MatchedRulesCount = len(allowHits)
 		trace.Summary.DenyRulesCount = len(denyHits)
 		trace.Summary.EffectiveDecision = decision
 		trace.Summary.VersionID = versionID
-		trace.MatchedRules = []api.MatchedRule{} // TODO: Populate from actual rule matches
-		trace.Denies = []api.DenyRule{}          // TODO: Populate from actual deny matches
+
+		// Populate matched rules
+		matchedRules := make([]api.MatchedRule, len(associations))
+		for i, assoc := range associations {
+			matchedRules[i] = api.MatchedRule{
+				RuleID:   assoc.ID.String(),
+				RuleName: "", // Association doesn't have a name field
+				Effect:   "ALLOW",
+			}
+		}
+		trace.MatchedRules = matchedRules
+
+		// Populate deny rules
+		denyRules := make([]api.DenyRule, len(prohibitions))
+		for i, proh := range prohibitions {
+			denyRules[i] = api.DenyRule{
+				RuleID:   proh.ID.String(),
+				RuleName: "", // Prohibition doesn't have a name field
+			}
+		}
+		trace.Denies = denyRules
 
 		response := api.EvaluateResponse{
 			Decision:    decision,
@@ -256,4 +310,3 @@ func bitmapToUUIDs(bmp *roaring.Bitmap, idArray []uuid.UUID) []uuid.UUID {
 	}
 	return result
 }
-

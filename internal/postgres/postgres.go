@@ -29,6 +29,8 @@ type Options struct {
 	DialTimeoutSeconds int `json:"dial_timeout_seconds,string" yaml:"dial_timeout_seconds"`
 	// MaxRetries is the maximum number of retries before giving up on a request.
 	MaxRetries int `json:"max_retries,string" yaml:"max_retries"`
+	// DefaultTenantID is the default tenant ID to seed into the database
+	DefaultTenantID string `json:"default_tenant_id,omitempty" yaml:"default_tenant_id,omitempty"`
 }
 
 type Handler struct {
@@ -77,7 +79,7 @@ func New(opts *Options) (*Handler, error) {
 	// Auto migrate the schema
 	err = db.AutoMigrate(
 		&Tenant{},
-		&User{},
+		&Subject{},
 		&Object{},
 		&PolicyClass{},
 		&UserAttribute{},
@@ -95,11 +97,28 @@ func New(opts *Options) (*Handler, error) {
 		return nil, err
 	}
 
+	// Drop any incorrectly created unique index that GORM might have created
+	// This ensures we use our SQL-defined index instead
+	// GORM might create indexes with different naming conventions
+	// We need to drop all possible variations
+	dropIndexStmts := []string{
+		`DROP INDEX IF EXISTS assignment_edges_uidx_asg_edge;`,
+		`DROP INDEX IF EXISTS uidx_asg_edge;`,
+		`DROP INDEX IF EXISTS assignment_edges_uidx_asg_edge_1;`,
+		`DROP INDEX IF EXISTS uidx_asg_edge_1;`,
+	}
+	for _, stmt := range dropIndexStmts {
+		if err := db.Exec(stmt).Error; err != nil {
+			// Ignore errors when dropping indexes that don't exist
+			log.Printf("Warning: failed to drop index (may not exist): %v", err)
+		}
+	}
+
 	// Composite uniqueness and helpful indexes (using raw SQL for precision)
 	// You can also do these in a migration tool like goose/atlas.
 	stmts := []string{
-		// Users uniqueness per tenant
-		`CREATE UNIQUE INDEX IF NOT EXISTS uidx_users_tenant_external ON users (tenant_id, external_id);`,
+		// Subjects uniqueness per tenant
+		`CREATE UNIQUE INDEX IF NOT EXISTS uidx_subjects_tenant_external ON subjects (tenant_id, external_id);`,
 
 		// Objects uniqueness per tenant
 		`CREATE UNIQUE INDEX IF NOT EXISTS uidx_objects_tenant_external ON objects (tenant_id, external_id);`,
@@ -110,8 +129,8 @@ func New(opts *Options) (*Handler, error) {
 		`CREATE UNIQUE INDEX IF NOT EXISTS uidx_pc_tenant_name ON policy_classes (tenant_id, name);`,
 
 		// Assignment edge uniqueness
-		`CREATE UNIQUE INDEX IF NOT EXISTS uidx_asg_edge ON assignment_edges
-		 (tenant_id, child_type, child_id, parent_type, parent_id);`,
+		// Note: We use CREATE UNIQUE INDEX (not IF NOT EXISTS) after dropping to ensure clean state
+		`CREATE UNIQUE INDEX IF NOT EXISTS uidx_asg_edge ON assignment_edges (tenant_id, child_type, child_id, parent_type, parent_id);`,
 
 		// Association uniqueness and operations uniqueness
 		`CREATE UNIQUE INDEX IF NOT EXISTS uidx_assoc_uatoa ON associations
@@ -140,10 +159,53 @@ func New(opts *Options) (*Handler, error) {
 		}
 	}
 
-	return &Handler{
+	// Seed default tenant from config if provided
+	if opts.DefaultTenantID != "" {
+		if err := seedDefaultTenant(db, opts.DefaultTenantID); err != nil {
+			return nil, fmt.Errorf("failed to seed default tenant: %w", err)
+		}
+	}
+
+	handler := &Handler{
 		H:  db,
 		db: sqlDB,
-	}, nil
+	}
+
+	// Seed data if default tenant is provided
+	// Note: We defer seed data loading to avoid circular dependencies
+	// The seed package will be called from main.go after initialization
+	if opts.DefaultTenantID != "" {
+		// Seed data will be loaded separately to avoid import cycles
+		// See cmd/main.go for seed initialization
+	}
+
+	return handler, nil
+}
+
+// seedDefaultTenant seeds the default tenant into the database if it doesn't exist
+func seedDefaultTenant(db *gorm.DB, tenantID string) error {
+	// Check if tenant already exists
+	var existing Tenant
+	result := db.Where("id = ?", tenantID).First(&existing)
+	if result.Error == nil {
+		// Tenant already exists, skip
+		return nil
+	}
+	if result.Error != gorm.ErrRecordNotFound {
+		// Some other error occurred
+		return result.Error
+	}
+
+	// Create the default tenant
+	tenant := Tenant{
+		ID:   tenantID,
+		Name: tenantID, // Use tenant ID as name
+	}
+	if err := db.Create(&tenant).Error; err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (p *Handler) Ping() (bool, error) {

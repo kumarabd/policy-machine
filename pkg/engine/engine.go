@@ -9,25 +9,25 @@ import (
 	"github.com/RoaringBitmap/roaring"
 	"github.com/google/uuid"
 	"github.com/kumarabd/gokit/logger"
-	"github.com/kumarabd/policy-machine/internal/metrics"
 	"github.com/kumarabd/policy-machine/internal/cache"
+	"github.com/kumarabd/policy-machine/internal/metrics"
 	"github.com/kumarabd/policy-machine/internal/postgres"
 )
 
 // Config holds engine configuration
 type Config struct {
-	TenantID          uuid.UUID          `yaml:"tenant_id" json:"tenant_id"`
-	MaxTraversalNodes int                `yaml:"max_traversal_nodes" json:"max_traversal_nodes"` // Maximum nodes to traverse in BFS operations (default: 100000)
-	CacheTTL          time.Duration      `yaml:"cache_ttl" json:"cache_ttl"`                     // Default TTL for most caches (default: 2 minutes)
+	TenantID          string            `yaml:"tenant_id" json:"tenant_id"`
+	MaxTraversalNodes int               `yaml:"max_traversal_nodes" json:"max_traversal_nodes"` // Maximum nodes to traverse in BFS operations (default: 100000)
+	CacheTTL          time.Duration     `yaml:"cache_ttl" json:"cache_ttl"`                     // Default TTL for most caches (default: 2 minutes)
 	Limits            cache.CacheLimits `yaml:"limits" json:"limits"`                           // Cache capacity limits (zero = use defaults)
-	MockMode          bool               `yaml:"mock_mode" json:"mock_mode"`                     // Enable mock mode for API responses
+	MockMode          bool              `yaml:"mock_mode" json:"mock_mode"`                     // Enable mock mode for API responses
 }
 
 type Engine struct {
 	log      *logger.Handler
 	metric   *metrics.Handler
 	db       *postgres.Handler
-	tenantID uuid.UUID
+	tenantID string
 
 	maxTraversalNodes int // Maximum nodes to traverse in BFS operations
 
@@ -79,7 +79,7 @@ func (e *Engine) GetDB() *postgres.Handler {
 }
 
 // GetTenantID returns the tenant ID from engine config
-func (e *Engine) GetTenantID() uuid.UUID {
+func (e *Engine) GetTenantID() string {
 	return e.tenantID
 }
 
@@ -126,6 +126,34 @@ func (e *Engine) AllowedFor(s *Snapshot, user uuid.UUID, op string, uaClosure *r
 	return e.allowedFor(s, user, op, uaClosure)
 }
 
+// AllowedForWithMatches returns the set of OAs allowed and the UA->OA pairs that contributed
+// Returns: (allowed bitmap, map of UA ID -> []OA ID that matched)
+func (e *Engine) AllowedForWithMatches(s *Snapshot, user uuid.UUID, op string, uaClosure *roaring.Bitmap) (*roaring.Bitmap, map[uuid.UUID][]uuid.UUID) {
+	allowed := roaring.New()
+	matches := make(map[uuid.UUID][]uuid.UUID) // UA ID -> []OA ID
+
+	it := uaClosure.Iterator()
+	for it.HasNext() {
+		uaIdx := it.Next()
+		uaID := s.uaByIdx[uaIdx]
+		targets := s.assoc[uaIdx][op] // bitmap of OA targets
+		if targets != nil {
+			oaIDs := []uuid.UUID{}
+			tit := targets.Iterator()
+			for tit.HasNext() {
+				oaIdx := tit.Next()
+				oaID := s.oaByIdx[oaIdx]
+				oaIDs = append(oaIDs, oaID)
+				allowed.Or(e.oaNodeDescendants(s, oaIdx))
+			}
+			if len(oaIDs) > 0 {
+				matches[uaID] = oaIDs
+			}
+		}
+	}
+	return allowed, matches
+}
+
 func (e *Engine) allowedFor(s *Snapshot, user uuid.UUID, op string, uaClosure *roaring.Bitmap) *roaring.Bitmap {
 	if b, ok := e.caches.AllowCache.Get(user, op); ok {
 		return b
@@ -151,6 +179,59 @@ func (e *Engine) allowedFor(s *Snapshot, user uuid.UUID, op string, uaClosure *r
 // DeniedFor returns the set of OAs denied for a user/operation (public for explain endpoint)
 func (e *Engine) DeniedFor(s *Snapshot, user uuid.UUID, op string, uaClosure *roaring.Bitmap) *roaring.Bitmap {
 	return e.deniedFor(s, user, op, uaClosure)
+}
+
+// DeniedForWithMatches returns the set of OAs denied and the subject->OA pairs that contributed
+// Returns: (denied bitmap, map of subject ID -> []OA ID that matched, map of UA ID -> []OA ID that matched)
+func (e *Engine) DeniedForWithMatches(s *Snapshot, user uuid.UUID, op string, uaClosure *roaring.Bitmap) (*roaring.Bitmap, map[uuid.UUID][]uuid.UUID, map[uuid.UUID][]uuid.UUID) {
+	denied := roaring.New()
+	userMatches := make(map[uuid.UUID][]uuid.UUID) // User ID -> []OA ID
+	uaMatches := make(map[uuid.UUID][]uuid.UUID)   // UA ID -> []OA ID
+
+	// UA-level prohibitions
+	it := uaClosure.Iterator()
+	for it.HasNext() {
+		uaIdx := it.Next()
+		uaID := s.uaByIdx[uaIdx]
+		opMap := s.uaProhibits[uaIdx]
+		if opMap == nil {
+			continue
+		}
+		targets := opMap[op] // bitmap of OA targets
+		if targets == nil {
+			continue
+		}
+		oaIDs := []uuid.UUID{}
+		tit := targets.Iterator()
+		for tit.HasNext() {
+			oaIdx := tit.Next()
+			oaID := s.oaByIdx[oaIdx]
+			oaIDs = append(oaIDs, oaID)
+			denied.Or(e.oaNodeDescendants(s, oaIdx))
+		}
+		if len(oaIDs) > 0 {
+			uaMatches[uaID] = oaIDs
+		}
+	}
+
+	// User-level prohibitions
+	if opMap := s.userProhibits[user]; opMap != nil {
+		if targets := opMap[op]; targets != nil {
+			oaIDs := []uuid.UUID{}
+			tit := targets.Iterator()
+			for tit.HasNext() {
+				oaIdx := tit.Next()
+				oaID := s.oaByIdx[oaIdx]
+				oaIDs = append(oaIDs, oaID)
+				denied.Or(e.oaNodeDescendants(s, oaIdx))
+			}
+			if len(oaIDs) > 0 {
+				userMatches[user] = oaIDs
+			}
+		}
+	}
+
+	return denied, userMatches, uaMatches
 }
 
 func (e *Engine) deniedFor(s *Snapshot, user uuid.UUID, op string, uaClosure *roaring.Bitmap) *roaring.Bitmap {

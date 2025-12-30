@@ -7,10 +7,10 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
-	"github.com/kumarabd/policy-machine/pkg/api"
+	httputil "github.com/kumarabd/policy-machine/internal/http"
 	"github.com/kumarabd/policy-machine/internal/mock"
 	"github.com/kumarabd/policy-machine/internal/postgres"
-	httputil "github.com/kumarabd/policy-machine/internal/http"
+	"github.com/kumarabd/policy-machine/pkg/api"
 	"gorm.io/gorm"
 )
 
@@ -308,7 +308,7 @@ func (s *Server) ListObjectGroups(w http.ResponseWriter, r *http.Request) {
 	}
 	cursor := r.URL.Query().Get("cursor")
 
-	oas, nextCursor, hasMore, err := s.engine.GetDB().ListObjectGroups(r.Context(), tenantID, query, limit, cursor)
+	oas, nextCursor, hasMore, err := s.engine.GetDB().ListObjectSets(r.Context(), tenantID, query, limit, cursor)
 	if err != nil {
 		httputil.RespondError(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return
@@ -316,13 +316,19 @@ func (s *Server) ListObjectGroups(w http.ResponseWriter, r *http.Request) {
 
 	groups := make([]api.ObjectSet, len(oas))
 	for i, oa := range oas {
+		// Get member IDs for this object set
+		memberIDs, err := s.engine.GetDB().GetObjectSetMembers(r.Context(), tenantID, oa.ID)
+		if err != nil {
+			// Log error but continue with empty member list
+			memberIDs = []uuid.UUID{}
+		}
 		groups[i] = api.ObjectSet{
 			ID:              oa.ID,
 			Name:            oa.Name,
 			Description:     "",
 			ScopeID:         nil,
 			Tags:            []string{},
-			MemberObjectIDs: []uuid.UUID{}, // TODO: Populate from relationships
+			MemberObjectIDs: memberIDs,
 			CreatedAt:       oa.CreatedAt,
 			UpdatedAt:       nil,
 		}
@@ -372,7 +378,7 @@ func (s *Server) CreateObjectGroup(w http.ResponseWriter, r *http.Request) {
 		Name: req.Name,
 	}
 
-	revision, err := s.engine.GetDB().CreateObjectGroup(r.Context(), tenantID, oa)
+	revision, err := s.engine.GetDB().CreateObjectSet(r.Context(), tenantID, oa)
 	if err != nil {
 		httputil.RespondError(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return
@@ -412,7 +418,7 @@ func (s *Server) GetObjectGroup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	oa, err := s.engine.GetDB().GetObjectGroup(r.Context(), tenantID, id)
+	oa, err := s.engine.GetDB().GetObjectSet(r.Context(), tenantID, id)
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
 			httputil.RespondError(w, http.StatusNotFound, "NOT_FOUND", "object set not found")
@@ -422,10 +428,22 @@ func (s *Server) GetObjectGroup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Get member IDs from assignment edges
+	memberIDs, err := s.engine.GetDB().GetObjectSetMembers(r.Context(), tenantID, id)
+	if err != nil {
+		httputil.RespondError(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
+		return
+	}
+
 	group := api.ObjectSet{
-		ID:        oa.ID,
-		Name:      oa.Name,
-		CreatedAt: oa.CreatedAt,
+		ID:              oa.ID,
+		Name:            oa.Name,
+		Description:     "",
+		ScopeID:         nil,
+		Tags:            []string{},
+		MemberObjectIDs: memberIDs,
+		CreatedAt:       oa.CreatedAt,
+		UpdatedAt:       &oa.UpdatedAt,
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -463,7 +481,7 @@ func (s *Server) UpdateObjectGroup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	revision, err := s.engine.GetDB().UpdateObjectGroup(r.Context(), tenantID, id, req.Name)
+	revision, err := s.engine.GetDB().UpdateObjectSet(r.Context(), tenantID, id, req.Name)
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
 			httputil.RespondError(w, http.StatusNotFound, "NOT_FOUND", "object set not found")
@@ -508,7 +526,7 @@ func (s *Server) DeleteObjectGroup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, err = s.engine.GetDB().DeleteObjectGroup(r.Context(), tenantID, id)
+	_, err = s.engine.GetDB().DeleteObjectSet(r.Context(), tenantID, id)
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
 			httputil.RespondError(w, http.StatusNotFound, "NOT_FOUND", "object set not found")

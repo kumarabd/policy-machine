@@ -3,12 +3,11 @@ package postgres
 import (
 	"time"
 
-	"github.com/google/uuid"
 	"gorm.io/datatypes"
 )
 
 type PolicyRevision struct {
-	TenantID  uuid.UUID `gorm:"type:uuid;primaryKey"`
+	TenantID  string    `gorm:"type:text;primaryKey"`
 	Revision  int64     `gorm:"not null;default:0"`
 	UpdatedAt time.Time `gorm:"autoUpdateTime"`
 }
@@ -24,9 +23,9 @@ const (
 // Keep this tight and explicit. Payload is "what to apply".
 // This is an outbox table: append-only, ordered by Seq.
 type PolicyChange struct {
-	Seq      int64     `gorm:"primaryKey;autoIncrement"`
-	TenantID uuid.UUID `gorm:"type:uuid;not null;index:idx_changes_tenant_seq,priority:1"`
-	Revision int64     `gorm:"not null;index:idx_changes_tenant_rev,priority:2"`
+	Seq      int64  `gorm:"primaryKey;autoIncrement"`
+	TenantID string `gorm:"type:text;not null;index:idx_changes_tenant_seq,priority:1"`
+	Revision int64  `gorm:"not null;index:idx_changes_tenant_rev,priority:2"`
 
 	Kind string   `gorm:"type:text;not null"` // e.g. "ASSIGNMENT_EDGE", "ASSOC_OP", "PROHIB_OP"
 	Op   ChangeOp `gorm:"type:text;not null"` // ADD/REMOVE/UPDATE

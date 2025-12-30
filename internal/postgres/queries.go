@@ -8,8 +8,8 @@ import (
 	"gorm.io/gorm"
 )
 
-// ListSubjects returns paginated list of users
-func (h *Handler) ListSubjects(ctx context.Context, tenantID uuid.UUID, query string, limit int, cursor string) ([]User, string, bool, error) {
+// ListSubjects returns paginated list of subjects
+func (h *Handler) ListSubjects(ctx context.Context, tenantID string, query string, limit int, cursor string) ([]Subject, string, bool, error) {
 	if limit <= 0 || limit > 1000 {
 		limit = 50
 	}
@@ -30,42 +30,42 @@ func (h *Handler) ListSubjects(ctx context.Context, tenantID uuid.UUID, query st
 		}
 	}
 
-	var users []User
-	err := db.Order("id ASC").Limit(limit + 1).Find(&users).Error
+	var subjects []Subject
+	err := db.Order("id ASC").Limit(limit + 1).Find(&subjects).Error
 	if err != nil {
 		return nil, "", false, err
 	}
 
-	hasMore := len(users) > limit
+	hasMore := len(subjects) > limit
 	if hasMore {
-		users = users[:limit]
+		subjects = subjects[:limit]
 	}
 
 	nextCursor := ""
-	if len(users) > 0 {
-		nextCursor = users[len(users)-1].ID.String()
+	if len(subjects) > 0 {
+		nextCursor = subjects[len(subjects)-1].ID.String()
 	}
 
-	return users, nextCursor, hasMore, nil
+	return subjects, nextCursor, hasMore, nil
 }
 
-// GetSubject returns a user by ID
-func (h *Handler) GetSubject(ctx context.Context, tenantID, userID uuid.UUID) (*User, error) {
-	var user User
+// GetSubject returns a subject by ID
+func (h *Handler) GetSubject(ctx context.Context, tenantID string, subjectID uuid.UUID) (*Subject, error) {
+	var subject Subject
 	err := h.H.WithContext(ctx).
-		Where("tenant_id = ? AND id = ?", tenantID, userID).
-		First(&user).Error
+		Where("tenant_id = ? AND id = ?", tenantID, subjectID).
+		First(&subject).Error
 	if err != nil {
 		return nil, err
 	}
-	return &user, nil
+	return &subject, nil
 }
 
-// UpdateSubject updates a user
-func (h *Handler) UpdateSubject(ctx context.Context, tenantID, userID uuid.UUID, updates map[string]interface{}) (int64, error) {
+// UpdateSubject updates a subject
+func (h *Handler) UpdateSubject(ctx context.Context, tenantID string, subjectID uuid.UUID, updates map[string]interface{}) (int64, error) {
 	return h.WithPolicyWriteTx(ctx, tenantID, func(tx *gorm.DB) error {
-		result := tx.Model(&User{}).
-			Where("tenant_id = ? AND id = ?", tenantID, userID).
+		result := tx.Model(&Subject{}).
+			Where("tenant_id = ? AND id = ?", tenantID, subjectID).
 			Updates(updates)
 		if result.Error != nil {
 			return result.Error
@@ -76,35 +76,35 @@ func (h *Handler) UpdateSubject(ctx context.Context, tenantID, userID uuid.UUID,
 
 		rev, _ := BumpRevision(tx, tenantID)
 		payload := map[string]any{
-			"user_id": userID,
-			"updates": updates,
+			"subject_id": subjectID,
+			"updates":    updates,
 		}
-		return AppendChange(tx, tenantID, rev, "USER_UPDATE", OpUpdate, payload)
+		return AppendChange(tx, tenantID, rev, "SUBJECT_UPDATE", OpUpdate, payload)
 	})
 }
 
-// DeleteSubject deletes a user
-func (h *Handler) DeleteSubject(ctx context.Context, tenantID, userID uuid.UUID) (int64, error) {
+// DeleteSubject deletes a subject
+func (h *Handler) DeleteSubject(ctx context.Context, tenantID string, subjectID uuid.UUID) (int64, error) {
 	return h.WithPolicyWriteTx(ctx, tenantID, func(tx *gorm.DB) error {
-		var user User
-		if err := tx.Where("tenant_id = ? AND id = ?", tenantID, userID).First(&user).Error; err != nil {
+		var subject Subject
+		if err := tx.Where("tenant_id = ? AND id = ?", tenantID, subjectID).First(&subject).Error; err != nil {
 			return err
 		}
 
-		if err := tx.Delete(&user).Error; err != nil {
+		if err := tx.Delete(&subject).Error; err != nil {
 			return err
 		}
 
 		rev, _ := BumpRevision(tx, tenantID)
 		payload := map[string]any{
-			"user_id": userID,
+			"subject_id": subjectID,
 		}
-		return AppendChange(tx, tenantID, rev, "USER_DELETE", OpRemove, payload)
+		return AppendChange(tx, tenantID, rev, "SUBJECT_DELETE", OpRemove, payload)
 	})
 }
 
-// ListSubjectGroups returns paginated list of user attributes
-func (h *Handler) ListSubjectGroups(ctx context.Context, tenantID uuid.UUID, query string, limit int, cursor string) ([]UserAttribute, string, bool, error) {
+// ListSubjectSets returns paginated list of subject attributes
+func (h *Handler) ListSubjectSets(ctx context.Context, tenantID string, query string, limit int, cursor string) ([]UserAttribute, string, bool, error) {
 	if limit <= 0 || limit > 1000 {
 		limit = 50
 	}
@@ -142,8 +142,25 @@ func (h *Handler) ListSubjectGroups(ctx context.Context, tenantID uuid.UUID, que
 	return uas, nextCursor, hasMore, nil
 }
 
-// GetSubjectGroup returns a user attribute by ID
-func (h *Handler) GetSubjectGroup(ctx context.Context, tenantID, uaID uuid.UUID) (*UserAttribute, error) {
+// Backward compatibility aliases
+func (h *Handler) ListSubjectGroups(ctx context.Context, tenantID string, query string, limit int, cursor string) ([]UserAttribute, string, bool, error) {
+	return h.ListSubjectSets(ctx, tenantID, query, limit, cursor)
+}
+
+func (h *Handler) GetSubjectGroup(ctx context.Context, tenantID string, uaID uuid.UUID) (*UserAttribute, error) {
+	return h.GetSubjectSet(ctx, tenantID, uaID)
+}
+
+func (h *Handler) UpdateSubjectGroup(ctx context.Context, tenantID string, uaID uuid.UUID, name string) (int64, error) {
+	return h.UpdateSubjectSet(ctx, tenantID, uaID, name)
+}
+
+func (h *Handler) DeleteSubjectGroup(ctx context.Context, tenantID string, uaID uuid.UUID) (int64, error) {
+	return h.DeleteSubjectSet(ctx, tenantID, uaID)
+}
+
+// GetSubjectSet returns a subject attribute by ID
+func (h *Handler) GetSubjectSet(ctx context.Context, tenantID string, uaID uuid.UUID) (*UserAttribute, error) {
 	var ua UserAttribute
 	err := h.H.WithContext(ctx).
 		Where("tenant_id = ? AND id = ?", tenantID, uaID).
@@ -154,8 +171,25 @@ func (h *Handler) GetSubjectGroup(ctx context.Context, tenantID, uaID uuid.UUID)
 	return &ua, nil
 }
 
-// UpdateSubjectGroup updates a user attribute
-func (h *Handler) UpdateSubjectGroup(ctx context.Context, tenantID, uaID uuid.UUID, name string) (int64, error) {
+// GetSubjectSetMembers returns all subject IDs that are members of a subject set
+func (h *Handler) GetSubjectSetMembers(ctx context.Context, tenantID string, uaID uuid.UUID) ([]uuid.UUID, error) {
+	var edges []AssignmentEdge
+	err := h.H.WithContext(ctx).
+		Where("tenant_id = ? AND parent_type = ? AND parent_id = ? AND child_type = ?", tenantID, NodeUA, uaID, NodeUser).
+		Find(&edges).Error
+	if err != nil {
+		return nil, err
+	}
+
+	memberIDs := make([]uuid.UUID, len(edges))
+	for i, edge := range edges {
+		memberIDs[i] = edge.ChildID
+	}
+	return memberIDs, nil
+}
+
+// UpdateSubjectSet updates a subject attribute
+func (h *Handler) UpdateSubjectSet(ctx context.Context, tenantID string, uaID uuid.UUID, name string) (int64, error) {
 	return h.WithPolicyWriteTx(ctx, tenantID, func(tx *gorm.DB) error {
 		result := tx.Model(&UserAttribute{}).
 			Where("tenant_id = ? AND id = ?", tenantID, uaID).
@@ -170,14 +204,14 @@ func (h *Handler) UpdateSubjectGroup(ctx context.Context, tenantID, uaID uuid.UU
 		rev, _ := BumpRevision(tx, tenantID)
 		payload := map[string]any{
 			"ua_id": uaID,
-			"name": name,
+			"name":  name,
 		}
 		return AppendChange(tx, tenantID, rev, "UA_UPDATE", OpUpdate, payload)
 	})
 }
 
-// DeleteSubjectGroup deletes a user attribute
-func (h *Handler) DeleteSubjectGroup(ctx context.Context, tenantID, uaID uuid.UUID) (int64, error) {
+// DeleteSubjectSet deletes a subject attribute
+func (h *Handler) DeleteSubjectSet(ctx context.Context, tenantID string, uaID uuid.UUID) (int64, error) {
 	return h.WithPolicyWriteTx(ctx, tenantID, func(tx *gorm.DB) error {
 		var ua UserAttribute
 		if err := tx.Where("tenant_id = ? AND id = ?", tenantID, uaID).First(&ua).Error; err != nil {
@@ -197,7 +231,7 @@ func (h *Handler) DeleteSubjectGroup(ctx context.Context, tenantID, uaID uuid.UU
 }
 
 // ListObjects returns paginated list of objects
-func (h *Handler) ListObjects(ctx context.Context, tenantID uuid.UUID, query string, limit int, cursor string) ([]Object, string, bool, error) {
+func (h *Handler) ListObjects(ctx context.Context, tenantID string, query string, limit int, cursor string) ([]Object, string, bool, error) {
 	if limit <= 0 || limit > 1000 {
 		limit = 50
 	}
@@ -236,7 +270,7 @@ func (h *Handler) ListObjects(ctx context.Context, tenantID uuid.UUID, query str
 }
 
 // GetObject returns an object by ID
-func (h *Handler) GetObject(ctx context.Context, tenantID, objectID uuid.UUID) (*Object, error) {
+func (h *Handler) GetObject(ctx context.Context, tenantID string, objectID uuid.UUID) (*Object, error) {
 	var obj Object
 	err := h.H.WithContext(ctx).
 		Where("tenant_id = ? AND id = ?", tenantID, objectID).
@@ -248,7 +282,7 @@ func (h *Handler) GetObject(ctx context.Context, tenantID, objectID uuid.UUID) (
 }
 
 // UpdateObject updates an object
-func (h *Handler) UpdateObject(ctx context.Context, tenantID, objectID uuid.UUID, updates map[string]interface{}) (int64, error) {
+func (h *Handler) UpdateObject(ctx context.Context, tenantID string, objectID uuid.UUID, updates map[string]interface{}) (int64, error) {
 	return h.WithPolicyWriteTx(ctx, tenantID, func(tx *gorm.DB) error {
 		result := tx.Model(&Object{}).
 			Where("tenant_id = ? AND id = ?", tenantID, objectID).
@@ -263,14 +297,14 @@ func (h *Handler) UpdateObject(ctx context.Context, tenantID, objectID uuid.UUID
 		rev, _ := BumpRevision(tx, tenantID)
 		payload := map[string]any{
 			"object_id": objectID,
-			"updates": updates,
+			"updates":   updates,
 		}
 		return AppendChange(tx, tenantID, rev, "OBJECT_UPDATE", OpUpdate, payload)
 	})
 }
 
 // DeleteObject deletes an object
-func (h *Handler) DeleteObject(ctx context.Context, tenantID, objectID uuid.UUID) (int64, error) {
+func (h *Handler) DeleteObject(ctx context.Context, tenantID string, objectID uuid.UUID) (int64, error) {
 	return h.WithPolicyWriteTx(ctx, tenantID, func(tx *gorm.DB) error {
 		var obj Object
 		if err := tx.Where("tenant_id = ? AND id = ?", tenantID, objectID).First(&obj).Error; err != nil {
@@ -289,8 +323,8 @@ func (h *Handler) DeleteObject(ctx context.Context, tenantID, objectID uuid.UUID
 	})
 }
 
-// ListObjectGroups returns paginated list of object attributes
-func (h *Handler) ListObjectGroups(ctx context.Context, tenantID uuid.UUID, query string, limit int, cursor string) ([]ObjectAttribute, string, bool, error) {
+// ListObjectSets returns paginated list of object attributes
+func (h *Handler) ListObjectSets(ctx context.Context, tenantID string, query string, limit int, cursor string) ([]ObjectAttribute, string, bool, error) {
 	if limit <= 0 || limit > 1000 {
 		limit = 50
 	}
@@ -328,8 +362,25 @@ func (h *Handler) ListObjectGroups(ctx context.Context, tenantID uuid.UUID, quer
 	return oas, nextCursor, hasMore, nil
 }
 
-// GetObjectGroup returns an object attribute by ID
-func (h *Handler) GetObjectGroup(ctx context.Context, tenantID, oaID uuid.UUID) (*ObjectAttribute, error) {
+// Backward compatibility aliases for ObjectSets
+func (h *Handler) ListObjectGroups(ctx context.Context, tenantID string, query string, limit int, cursor string) ([]ObjectAttribute, string, bool, error) {
+	return h.ListObjectSets(ctx, tenantID, query, limit, cursor)
+}
+
+func (h *Handler) GetObjectGroup(ctx context.Context, tenantID string, oaID uuid.UUID) (*ObjectAttribute, error) {
+	return h.GetObjectSet(ctx, tenantID, oaID)
+}
+
+func (h *Handler) UpdateObjectGroup(ctx context.Context, tenantID string, oaID uuid.UUID, name string) (int64, error) {
+	return h.UpdateObjectSet(ctx, tenantID, oaID, name)
+}
+
+func (h *Handler) DeleteObjectGroup(ctx context.Context, tenantID string, oaID uuid.UUID) (int64, error) {
+	return h.DeleteObjectSet(ctx, tenantID, oaID)
+}
+
+// GetObjectSet returns an object attribute by ID
+func (h *Handler) GetObjectSet(ctx context.Context, tenantID string, oaID uuid.UUID) (*ObjectAttribute, error) {
 	var oa ObjectAttribute
 	err := h.H.WithContext(ctx).
 		Where("tenant_id = ? AND id = ?", tenantID, oaID).
@@ -340,8 +391,25 @@ func (h *Handler) GetObjectGroup(ctx context.Context, tenantID, oaID uuid.UUID) 
 	return &oa, nil
 }
 
-// UpdateObjectGroup updates an object attribute
-func (h *Handler) UpdateObjectGroup(ctx context.Context, tenantID, oaID uuid.UUID, name string) (int64, error) {
+// GetObjectSetMembers returns all object IDs that are members of an object set
+func (h *Handler) GetObjectSetMembers(ctx context.Context, tenantID string, oaID uuid.UUID) ([]uuid.UUID, error) {
+	var edges []AssignmentEdge
+	err := h.H.WithContext(ctx).
+		Where("tenant_id = ? AND parent_type = ? AND parent_id = ? AND child_type = ?", tenantID, NodeOA, oaID, NodeObject).
+		Find(&edges).Error
+	if err != nil {
+		return nil, err
+	}
+
+	memberIDs := make([]uuid.UUID, len(edges))
+	for i, edge := range edges {
+		memberIDs[i] = edge.ChildID
+	}
+	return memberIDs, nil
+}
+
+// UpdateObjectSet updates an object attribute
+func (h *Handler) UpdateObjectSet(ctx context.Context, tenantID string, oaID uuid.UUID, name string) (int64, error) {
 	return h.WithPolicyWriteTx(ctx, tenantID, func(tx *gorm.DB) error {
 		result := tx.Model(&ObjectAttribute{}).
 			Where("tenant_id = ? AND id = ?", tenantID, oaID).
@@ -356,14 +424,14 @@ func (h *Handler) UpdateObjectGroup(ctx context.Context, tenantID, oaID uuid.UUI
 		rev, _ := BumpRevision(tx, tenantID)
 		payload := map[string]any{
 			"oa_id": oaID,
-			"name": name,
+			"name":  name,
 		}
 		return AppendChange(tx, tenantID, rev, "OA_UPDATE", OpUpdate, payload)
 	})
 }
 
-// DeleteObjectGroup deletes an object attribute
-func (h *Handler) DeleteObjectGroup(ctx context.Context, tenantID, oaID uuid.UUID) (int64, error) {
+// DeleteObjectSet deletes an object attribute
+func (h *Handler) DeleteObjectSet(ctx context.Context, tenantID string, oaID uuid.UUID) (int64, error) {
 	return h.WithPolicyWriteTx(ctx, tenantID, func(tx *gorm.DB) error {
 		var oa ObjectAttribute
 		if err := tx.Where("tenant_id = ? AND id = ?", tenantID, oaID).First(&oa).Error; err != nil {
@@ -411,7 +479,7 @@ func MapRelationshipKindToEdgeTypes(kind string, fromType, toType string) (child
 }
 
 // ListRelationships returns paginated list of assignment edges
-func (h *Handler) ListRelationships(ctx context.Context, tenantID uuid.UUID, filters map[string]interface{}, limit int, cursor string) ([]AssignmentEdge, string, bool, error) {
+func (h *Handler) ListRelationships(ctx context.Context, tenantID string, filters map[string]interface{}, limit int, cursor string) ([]AssignmentEdge, string, bool, error) {
 	if limit <= 0 || limit > 1000 {
 		limit = 50
 	}
@@ -499,7 +567,7 @@ func (h *Handler) ListRelationships(ctx context.Context, tenantID uuid.UUID, fil
 }
 
 // ListRules returns paginated list of associations with operations
-func (h *Handler) ListRules(ctx context.Context, tenantID uuid.UUID, filters map[string]interface{}, limit int, cursor string) ([]Association, []map[string]interface{}, string, bool, error) {
+func (h *Handler) ListRules(ctx context.Context, tenantID string, filters map[string]interface{}, limit int, cursor string) ([]Association, []map[string]interface{}, string, bool, error) {
 	if limit <= 0 || limit > 1000 {
 		limit = 50
 	}
@@ -553,11 +621,11 @@ func (h *Handler) ListRules(ctx context.Context, tenantID uuid.UUID, filters map
 	results := make([]map[string]interface{}, len(assocs))
 	for i, a := range assocs {
 		results[i] = map[string]interface{}{
-			"id":            a.ID,
-			"ua_id":         a.UserAttributeID,
-			"oa_id":         a.ObjectAttributeID,
-			"operations":    opsMap[a.ID],
-			"created_at":    a.CreatedAt,
+			"id":         a.ID,
+			"ua_id":      a.UserAttributeID,
+			"oa_id":      a.ObjectAttributeID,
+			"operations": opsMap[a.ID],
+			"created_at": a.CreatedAt,
 		}
 	}
 
@@ -570,7 +638,7 @@ func (h *Handler) ListRules(ctx context.Context, tenantID uuid.UUID, filters map
 }
 
 // GetRule returns an association with operations
-func (h *Handler) GetRule(ctx context.Context, tenantID, assocID uuid.UUID) (*Association, []string, error) {
+func (h *Handler) GetRule(ctx context.Context, tenantID string, assocID uuid.UUID) (*Association, []string, error) {
 	var assoc Association
 	err := h.H.WithContext(ctx).
 		Where("tenant_id = ? AND id = ?", tenantID, assocID).
@@ -592,8 +660,142 @@ func (h *Handler) GetRule(ctx context.Context, tenantID, assocID uuid.UUID) (*As
 	return &assoc, operations, nil
 }
 
+// GetAssociationsByUAOA returns all associations matching UA->OA pairs for a given operation
+func (h *Handler) GetAssociationsByUAOA(ctx context.Context, tenantID string, uaOAPairs map[uuid.UUID][]uuid.UUID, operation string) ([]Association, error) {
+	if len(uaOAPairs) == 0 {
+		return []Association{}, nil
+	}
+
+	// First, get all association IDs that have the requested operation
+	var assocOps []AssociationOperation
+	err := h.H.WithContext(ctx).
+		Where("tenant_id = ? AND operation = ?", tenantID, operation).
+		Find(&assocOps).Error
+	if err != nil {
+		return nil, err
+	}
+
+	// Get association IDs that have this operation
+	assocIDSet := make(map[uuid.UUID]bool)
+	for _, ao := range assocOps {
+		assocIDSet[ao.AssociationID] = true
+	}
+
+	if len(assocIDSet) == 0 {
+		return []Association{}, nil
+	}
+
+	// Build list of association IDs to query
+	assocIDs := make([]uuid.UUID, 0, len(assocIDSet))
+	for id := range assocIDSet {
+		assocIDs = append(assocIDs, id)
+	}
+
+	// Query associations by IDs
+	var assocs []Association
+	err = h.H.WithContext(ctx).
+		Where("tenant_id = ? AND id IN ?", tenantID, assocIDs).
+		Find(&assocs).Error
+	if err != nil {
+		return nil, err
+	}
+
+	// Filter to only associations that match the UA->OA pairs
+	filtered := []Association{}
+	for _, a := range assocs {
+		if oaIDs, ok := uaOAPairs[a.UserAttributeID]; ok {
+			// Check if this association's OA is in the list
+			for _, oaID := range oaIDs {
+				if a.ObjectAttributeID == oaID {
+					filtered = append(filtered, a)
+					break
+				}
+			}
+		}
+	}
+
+	return filtered, nil
+}
+
+// GetProhibitionsBySubjectOA returns all prohibitions matching subject->OA pairs for a given operation
+func (h *Handler) GetProhibitionsBySubjectOA(ctx context.Context, tenantID string, userMatches map[uuid.UUID][]uuid.UUID, uaMatches map[uuid.UUID][]uuid.UUID, operation string) ([]Prohibition, error) {
+	if len(userMatches) == 0 && len(uaMatches) == 0 {
+		return []Prohibition{}, nil
+	}
+
+	// First, get all prohibition IDs that have the requested operation
+	var prohOps []ProhibitionOperation
+	err := h.H.WithContext(ctx).
+		Where("tenant_id = ? AND operation = ?", tenantID, operation).
+		Find(&prohOps).Error
+	if err != nil {
+		return nil, err
+	}
+
+	// Get prohibition IDs that have this operation
+	prohIDSet := make(map[uuid.UUID]bool)
+	for _, po := range prohOps {
+		prohIDSet[po.ProhibitionID] = true
+	}
+
+	if len(prohIDSet) == 0 {
+		return []Prohibition{}, nil
+	}
+
+	// Build list of prohibition IDs to query
+	prohIDs := make([]uuid.UUID, 0, len(prohIDSet))
+	for id := range prohIDSet {
+		prohIDs = append(prohIDs, id)
+	}
+
+	// Query prohibitions by IDs
+	var prohs []Prohibition
+	err = h.H.WithContext(ctx).
+		Where("tenant_id = ? AND id IN ?", tenantID, prohIDs).
+		Find(&prohs).Error
+	if err != nil {
+		return nil, err
+	}
+
+	// Filter to only prohibitions that match the subject->OA pairs
+	filtered := []Prohibition{}
+	for _, p := range prohs {
+		matched := false
+
+		// Check user-level prohibitions
+		if p.SubjectType == ProhibitUser {
+			if oaIDs, ok := userMatches[p.SubjectID]; ok {
+				for _, oaID := range oaIDs {
+					if p.ObjectAttributeID == oaID {
+						matched = true
+						break
+					}
+				}
+			}
+		}
+
+		// Check UA-level prohibitions
+		if p.SubjectType == ProhibitUA {
+			if oaIDs, ok := uaMatches[p.SubjectID]; ok {
+				for _, oaID := range oaIDs {
+					if p.ObjectAttributeID == oaID {
+						matched = true
+						break
+					}
+				}
+			}
+		}
+
+		if matched {
+			filtered = append(filtered, p)
+		}
+	}
+
+	return filtered, nil
+}
+
 // UpdateRule updates operations for an association
-func (h *Handler) UpdateRule(ctx context.Context, tenantID, assocID uuid.UUID, ops []string) (int64, error) {
+func (h *Handler) UpdateRule(ctx context.Context, tenantID string, assocID uuid.UUID, ops []string) (int64, error) {
 	return h.WithPolicyWriteTx(ctx, tenantID, func(tx *gorm.DB) error {
 		var assoc Association
 		if err := tx.Where("tenant_id = ? AND id = ?", tenantID, assocID).First(&assoc).Error; err != nil {
@@ -622,14 +824,14 @@ func (h *Handler) UpdateRule(ctx context.Context, tenantID, assocID uuid.UUID, o
 		payload := map[string]any{
 			"ua_id": assoc.UserAttributeID,
 			"oa_id": assoc.ObjectAttributeID,
-			"ops": ops,
+			"ops":   ops,
 		}
 		return AppendChange(tx, tenantID, rev, "ASSOC_OP", OpUpdate, payload)
 	})
 }
 
 // ListDenies returns paginated list of prohibitions with operations
-func (h *Handler) ListDenies(ctx context.Context, tenantID uuid.UUID, filters map[string]interface{}, limit int, cursor string) ([]Prohibition, []map[string]interface{}, string, bool, error) {
+func (h *Handler) ListDenies(ctx context.Context, tenantID string, filters map[string]interface{}, limit int, cursor string) ([]Prohibition, []map[string]interface{}, string, bool, error) {
 	if limit <= 0 || limit > 1000 {
 		limit = 50
 	}
@@ -687,12 +889,12 @@ func (h *Handler) ListDenies(ctx context.Context, tenantID uuid.UUID, filters ma
 	results := make([]map[string]interface{}, len(prohs))
 	for i, p := range prohs {
 		results[i] = map[string]interface{}{
-			"id":            p.ID,
-			"subject_type":  p.SubjectType,
-			"subject_id":    p.SubjectID,
-			"oa_id":         p.ObjectAttributeID,
-			"operations":    opsMap[p.ID],
-			"created_at":    p.CreatedAt,
+			"id":           p.ID,
+			"subject_type": p.SubjectType,
+			"subject_id":   p.SubjectID,
+			"oa_id":        p.ObjectAttributeID,
+			"operations":   opsMap[p.ID],
+			"created_at":   p.CreatedAt,
 		}
 	}
 
@@ -705,7 +907,7 @@ func (h *Handler) ListDenies(ctx context.Context, tenantID uuid.UUID, filters ma
 }
 
 // GetDeny returns a prohibition with operations
-func (h *Handler) GetDeny(ctx context.Context, tenantID, prohID uuid.UUID) (*Prohibition, []string, error) {
+func (h *Handler) GetDeny(ctx context.Context, tenantID string, prohID uuid.UUID) (*Prohibition, []string, error) {
 	var proh Prohibition
 	err := h.H.WithContext(ctx).
 		Where("tenant_id = ? AND id = ?", tenantID, prohID).
@@ -728,7 +930,7 @@ func (h *Handler) GetDeny(ctx context.Context, tenantID, prohID uuid.UUID) (*Pro
 }
 
 // UpdateDeny updates operations and targets for a prohibition
-func (h *Handler) UpdateDeny(ctx context.Context, tenantID, prohID uuid.UUID, ops []string, oaIDs []uuid.UUID) (int64, error) {
+func (h *Handler) UpdateDeny(ctx context.Context, tenantID string, prohID uuid.UUID, ops []string, oaIDs []uuid.UUID) (int64, error) {
 	return h.WithPolicyWriteTx(ctx, tenantID, func(tx *gorm.DB) error {
 		var proh Prohibition
 		if err := tx.Where("tenant_id = ? AND id = ?", tenantID, prohID).First(&proh).Error; err != nil {
@@ -771,11 +973,11 @@ func (h *Handler) UpdateDeny(ctx context.Context, tenantID, prohID uuid.UUID, op
 }
 
 // GetGraphSummary returns counts of all entities
-func (h *Handler) GetGraphSummary(ctx context.Context, tenantID uuid.UUID) (map[string]int64, error) {
+func (h *Handler) GetGraphSummary(ctx context.Context, tenantID string) (map[string]int64, error) {
 	summary := make(map[string]int64)
 
 	var count int64
-	h.H.WithContext(ctx).Model(&User{}).Where("tenant_id = ?", tenantID).Count(&count)
+	h.H.WithContext(ctx).Model(&Subject{}).Where("tenant_id = ?", tenantID).Count(&count)
 	summary["subjects"] = count
 
 	h.H.WithContext(ctx).Model(&Object{}).Where("tenant_id = ?", tenantID).Count(&count)
@@ -800,7 +1002,7 @@ func (h *Handler) GetGraphSummary(ctx context.Context, tenantID uuid.UUID) (map[
 }
 
 // GraphSearch searches for nodes by name/external_id
-func (h *Handler) GraphSearch(ctx context.Context, tenantID uuid.UUID, query string, types []string, limit int) ([]map[string]interface{}, error) {
+func (h *Handler) GraphSearch(ctx context.Context, tenantID string, query string, types []string, limit int) ([]map[string]interface{}, error) {
 	if limit <= 0 || limit > 100 {
 		limit = 20
 	}
@@ -817,18 +1019,18 @@ func (h *Handler) GraphSearch(ctx context.Context, tenantID uuid.UUID, query str
 		typeSet[t] = true
 	}
 
-	// Search users
+	// Search subjects
 	if len(types) == 0 || typeSet["subject"] {
-		var users []User
+		var subjects []Subject
 		h.H.WithContext(ctx).
 			Where("tenant_id = ? AND (external_id ILIKE ? OR email ILIKE ? OR display ILIKE ?)", tenantID, search, search, search).
 			Limit(limit).
-			Find(&users)
-		for _, u := range users {
+			Find(&subjects)
+		for _, s := range subjects {
 			results = append(results, map[string]interface{}{
-				"id":   u.ID,
+				"id":   s.ID,
 				"type": "subject",
-				"name": u.ExternalID,
+				"name": s.ExternalID,
 			})
 		}
 	}
@@ -883,4 +1085,3 @@ func (h *Handler) GraphSearch(ctx context.Context, tenantID uuid.UUID, query str
 
 	return results, nil
 }
-

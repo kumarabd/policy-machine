@@ -18,7 +18,7 @@ const (
 
 // WouldCreateCycle checks if adding an edge would create a cycle in the graph
 // Only applies to UA->UA and OA->OA edges
-func WouldCreateCycle(ctx context.Context, tx *gorm.DB, tenantID uuid.UUID,
+func WouldCreateCycle(ctx context.Context, tx *gorm.DB, tenantID string,
 	childType, parentType NodeType, childID, parentID uuid.UUID) (bool, error) {
 
 	// Only check cycles for UA->UA and OA->OA
@@ -82,4 +82,3 @@ func WouldCreateCycle(ctx context.Context, tx *gorm.DB, tenantID uuid.UUID,
 
 	return result.HasCycle, nil
 }
-

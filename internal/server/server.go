@@ -2,10 +2,10 @@ package server
 
 import (
 	"github.com/kumarabd/gokit/logger"
+	"github.com/kumarabd/policy-machine/internal/http/controlplane"
+	"github.com/kumarabd/policy-machine/internal/http/dataplane"
 	"github.com/kumarabd/policy-machine/internal/metrics"
 	"github.com/kumarabd/policy-machine/pkg/engine"
-	"github.com/kumarabd/policy-machine/internal/http/dataplane"
-	"github.com/kumarabd/policy-machine/internal/http/controlplane"
 )
 
 // Server defines the interface for any server implementation (HTTP, gRPC, etc.)
@@ -24,20 +24,20 @@ type ControlplaneConfig struct {
 	Port int64 `json:"port" yaml:"port"`
 }
 
-// Config holds server configuration for both dataplane and controlplane
+// Config holds server configuration for dataplane and controlplane
 type Config struct {
-	Name         string             `json:"name" yaml:"name"`
-	Dataplane    *DataplaneConfig  `json:"dataplane" yaml:"dataplane"`
+	Name         string              `json:"name" yaml:"name"`
+	Dataplane    *DataplaneConfig    `json:"dataplane" yaml:"dataplane"`
 	Controlplane *ControlplaneConfig `json:"controlplane" yaml:"controlplane"`
 }
 
-// Servers holds both dataplane and controlplane server instances
+// Servers holds dataplane and controlplane server instances
 type Servers struct {
 	Dataplane    Server
 	Controlplane Server
 }
 
-// NewServers creates both dataplane and controlplane server instances
+// NewServers creates dataplane and controlplane server instances
 func NewServers(l *logger.Handler, m *metrics.Handler, config *Config, eng *engine.Engine) (*Servers, error) {
 	// Create dataplane server
 	dataplaneConfig := &dataplane.Config{
@@ -71,7 +71,7 @@ func NewServers(l *logger.Handler, m *metrics.Handler, config *Config, eng *engi
 	}, nil
 }
 
-// Start starts both servers
+// Start starts all servers
 func (s *Servers) Start(ch chan struct{}) error {
 	// Start dataplane server
 	if err := s.Dataplane.Start(ch); err != nil {
@@ -86,7 +86,7 @@ func (s *Servers) Start(ch chan struct{}) error {
 	return nil
 }
 
-// Stop stops both servers
+// Stop stops all servers
 func (s *Servers) Stop() error {
 	if err := s.Dataplane.Stop(); err != nil {
 		return err

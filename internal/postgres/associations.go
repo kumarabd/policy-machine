@@ -7,7 +7,7 @@ import (
 	"gorm.io/gorm"
 )
 
-func CreateAssociation(ctx context.Context, db *gorm.DB, tenantID, uaID, oaID uuid.UUID, ops []string) error {
+func CreateAssociation(ctx context.Context, db *gorm.DB, tenantID string, uaID, oaID uuid.UUID, ops []string) error {
 	return db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		assoc := Association{
 			TenantID:          tenantID,
@@ -37,4 +37,3 @@ func CreateAssociation(ctx context.Context, db *gorm.DB, tenantID, uaID, oaID uu
 		return nil
 	})
 }
-

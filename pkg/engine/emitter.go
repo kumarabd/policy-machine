@@ -7,7 +7,7 @@ import (
 )
 
 type DecisionEvent struct {
-	TenantID  uuid.UUID
+	TenantID  string
 	UserID    uuid.UUID
 	ObjectID  uuid.UUID
 	Operation string

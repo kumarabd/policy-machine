@@ -6,9 +6,9 @@ import (
 	"strconv"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/kumarabd/policy-machine/pkg/api"
-	"github.com/kumarabd/policy-machine/internal/mock"
 	httputil "github.com/kumarabd/policy-machine/internal/http"
+	"github.com/kumarabd/policy-machine/internal/mock"
+	"github.com/kumarabd/policy-machine/pkg/api"
 )
 
 // GetVersionDiff returns the diff between two versions
@@ -105,21 +105,81 @@ func (s *Server) GetVersionSnapshot(w http.ResponseWriter, r *http.Request) {
 	}
 
 	idStr := chi.URLParam(r, "id")
-	_, err := strconv.ParseInt(idStr, 10, 64)
+	targetRevision, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
 		httputil.RespondError(w, http.StatusBadRequest, "INVALID_ID", "Invalid version ID")
 		return
 	}
-	_ = tenantID // TODO: Use tenantID when implementing full versioning
 
-	// For now, return current state (in real implementation, would restore to specific version)
-	// This is a placeholder - full implementation would require versioning support
+	// Get current revision to check if target is valid
+	currentRev, err := s.engine.GetDB().GetCurrentRevision(r.Context(), tenantID)
+	if err != nil {
+		httputil.RespondError(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
+		return
+	}
+
+	if targetRevision > currentRev {
+		httputil.RespondError(w, http.StatusBadRequest, "INVALID_VERSION", "Version does not exist yet")
+		return
+	}
+
+	// For version 0, return empty state
+	if targetRevision == 0 {
+		response := map[string]interface{}{
+			"versionId": idStr,
+			"subjects":  []interface{}{},
+			"objects":   []interface{}{},
+			"rules":     []interface{}{},
+			"denies":    []interface{}{},
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	// Get all changes up to and including the target revision
+	// We use a large limit to get all changes (in production, might want pagination)
+	changes, err := s.engine.GetDB().GetPolicyChanges(r.Context(), tenantID, 0, 100000)
+	if err != nil {
+		httputil.RespondError(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
+		return
+	}
+
+	// Filter changes up to target revision
+	var relevantChanges []api.PolicyChangeItem
+	for _, ch := range changes {
+		if ch.Revision <= targetRevision {
+			var payload map[string]interface{}
+			if len(ch.Payload) > 0 {
+				if err := json.Unmarshal(ch.Payload, &payload); err != nil {
+					payload = make(map[string]interface{})
+				}
+			} else {
+				payload = make(map[string]interface{})
+			}
+
+			relevantChanges = append(relevantChanges, api.PolicyChangeItem{
+				Seq:       ch.Seq,
+				Revision:  ch.Revision,
+				Kind:      ch.Kind,
+				Op:        string(ch.Op),
+				Payload:   payload,
+				CreatedAt: ch.CreatedAt,
+			})
+		}
+	}
+
+	// For now, return the changes that led to this version
+	// A full implementation would reconstruct the actual state by applying all changes
+	// This is a simplified version that at least provides useful information
 	response := map[string]interface{}{
 		"versionId": idStr,
-		"subjects":  []interface{}{},
-		"objects":   []interface{}{},
-		"rules":     []interface{}{},
-		"denies":    []interface{}{},
+		"changes":   relevantChanges,
+		"note":      "This is a simplified snapshot. Full state reconstruction would require applying all changes in order.",
+		"subjects":  []interface{}{}, // TODO: Reconstruct from changes
+		"objects":   []interface{}{}, // TODO: Reconstruct from changes
+		"rules":     []interface{}{}, // TODO: Reconstruct from changes
+		"denies":    []interface{}{}, // TODO: Reconstruct from changes
 	}
 
 	w.Header().Set("Content-Type", "application/json")
