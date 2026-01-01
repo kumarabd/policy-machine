@@ -26,7 +26,7 @@ func (s *Server) ExportPolicy(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get all entities
-	users, _, _, _ := s.engine.GetDB().ListSubjects(r.Context(), tenantID, "", 10000, "")
+	subjects, _, _, _ := s.engine.GetDB().ListSubjects(r.Context(), tenantID, "", 10000, "")
 	uas, _, _, _ := s.engine.GetDB().ListSubjectSets(r.Context(), tenantID, "", 10000, "")
 	objects, _, _, _ := s.engine.GetDB().ListObjects(r.Context(), tenantID, "", 10000, "")
 	oas, _, _, _ := s.engine.GetDB().ListObjectSets(r.Context(), tenantID, "", 10000, "")
@@ -35,14 +35,14 @@ func (s *Server) ExportPolicy(w http.ResponseWriter, r *http.Request) {
 	_, prohs, _, _, _ := s.engine.GetDB().ListDenies(r.Context(), tenantID, map[string]interface{}{}, 10000, "")
 
 	// Convert to API models
-	subjects := make([]httputil.Subject, len(users))
-	for i, u := range users {
-		subjects[i] = api.Subject{
-			ID:         u.ID,
-			ExternalID: u.ExternalID,
-			Email:      u.Email,
-			Display:    u.Display,
-			CreatedAt:  u.CreatedAt,
+	subjectModels := make([]httputil.Subject, len(subjects))
+	for i, s := range subjects {
+		subjectModels[i] = api.Subject{
+			ID:         s.ID,
+			ExternalID: s.ExternalID,
+			Email:      s.Email,
+			Display:    s.Display,
+			CreatedAt:  s.CreatedAt,
 		}
 	}
 
@@ -141,7 +141,7 @@ func (s *Server) ExportPolicy(w http.ResponseWriter, r *http.Request) {
 
 	bundle := httputil.PolicyBundle{
 		Revision:      rev,
-		Subjects:      subjects,
+		Subjects:      subjectModels,
 		SubjectSets:   subjectSets,
 		Objects:       objs,
 		ObjectSets:    objectSets,
@@ -195,7 +195,7 @@ func (s *Server) ImportPolicy(w http.ResponseWriter, r *http.Request) {
 
 	// Import subject sets
 	for _, sg := range req.Bundle.SubjectSets {
-		ua := &postgres.UserAttribute{Name: sg.Name}
+		ua := &postgres.SubjectAttribute{Name: sg.Name}
 		_, err := s.engine.GetDB().CreateSubjectSet(r.Context(), tenantID, ua)
 		if err == nil {
 			applied++
@@ -251,7 +251,7 @@ func (s *Server) ImportPolicy(w http.ResponseWriter, r *http.Request) {
 
 	// Import denies
 	for _, deny := range req.Bundle.Denies {
-		subjectType := postgres.ProhibitUser
+		subjectType := postgres.ProhibitSubject
 		if deny.Subject.Type == "subject-set" {
 			subjectType = postgres.ProhibitUA
 		}

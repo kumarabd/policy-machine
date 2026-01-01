@@ -91,7 +91,7 @@ func (e *Engine) Refresh(ctx context.Context) error {
 	}
 
 	var rev postgres.PolicyRevision
-	_ = e.db.H.WithContext(ctx).First(&rev, "tenant_id = ?", e.tenantID).Error
+	_ = e.db.H.WithContext(ctx).Model(&postgres.PolicyRevision{}).First(&rev, "tenant_id = ?", e.tenantID).Error
 	snap.Version = rev.Revision
 
 	var maxSeq int64
@@ -121,14 +121,14 @@ func (e *Engine) Snapshot() *Snapshot {
 }
 
 // --- Decision (uses closures + bitmaps + cache) ---
-// AllowedFor returns the set of OAs allowed for a user/operation (public for explain endpoint)
-func (e *Engine) AllowedFor(s *Snapshot, user uuid.UUID, op string, uaClosure *roaring.Bitmap) *roaring.Bitmap {
-	return e.allowedFor(s, user, op, uaClosure)
+// AllowedFor returns the set of OAs allowed for a subject/operation (public for explain endpoint)
+func (e *Engine) AllowedFor(s *Snapshot, subject uuid.UUID, op string, uaClosure *roaring.Bitmap) *roaring.Bitmap {
+	return e.allowedFor(s, subject, op, uaClosure)
 }
 
 // AllowedForWithMatches returns the set of OAs allowed and the UA->OA pairs that contributed
 // Returns: (allowed bitmap, map of UA ID -> []OA ID that matched)
-func (e *Engine) AllowedForWithMatches(s *Snapshot, user uuid.UUID, op string, uaClosure *roaring.Bitmap) (*roaring.Bitmap, map[uuid.UUID][]uuid.UUID) {
+func (e *Engine) AllowedForWithMatches(s *Snapshot, subject uuid.UUID, op string, uaClosure *roaring.Bitmap) (*roaring.Bitmap, map[uuid.UUID][]uuid.UUID) {
 	allowed := roaring.New()
 	matches := make(map[uuid.UUID][]uuid.UUID) // UA ID -> []OA ID
 
@@ -154,8 +154,8 @@ func (e *Engine) AllowedForWithMatches(s *Snapshot, user uuid.UUID, op string, u
 	return allowed, matches
 }
 
-func (e *Engine) allowedFor(s *Snapshot, user uuid.UUID, op string, uaClosure *roaring.Bitmap) *roaring.Bitmap {
-	if b, ok := e.caches.AllowCache.Get(user, op); ok {
+func (e *Engine) allowedFor(s *Snapshot, subject uuid.UUID, op string, uaClosure *roaring.Bitmap) *roaring.Bitmap {
+	if b, ok := e.caches.AllowCache.Get(subject, op); ok {
 		return b
 	}
 	allowed := roaring.New()
@@ -172,21 +172,21 @@ func (e *Engine) allowedFor(s *Snapshot, user uuid.UUID, op string, uaClosure *r
 		}
 	}
 	// Store immutable bitmap (don't mutate later)
-	e.caches.AllowCache.Put(user, op, allowed)
+	e.caches.AllowCache.Put(subject, op, allowed)
 	return allowed
 }
 
-// DeniedFor returns the set of OAs denied for a user/operation (public for explain endpoint)
-func (e *Engine) DeniedFor(s *Snapshot, user uuid.UUID, op string, uaClosure *roaring.Bitmap) *roaring.Bitmap {
-	return e.deniedFor(s, user, op, uaClosure)
+// DeniedFor returns the set of OAs denied for a subject/operation (public for explain endpoint)
+func (e *Engine) DeniedFor(s *Snapshot, subject uuid.UUID, op string, uaClosure *roaring.Bitmap) *roaring.Bitmap {
+	return e.deniedFor(s, subject, op, uaClosure)
 }
 
 // DeniedForWithMatches returns the set of OAs denied and the subject->OA pairs that contributed
 // Returns: (denied bitmap, map of subject ID -> []OA ID that matched, map of UA ID -> []OA ID that matched)
-func (e *Engine) DeniedForWithMatches(s *Snapshot, user uuid.UUID, op string, uaClosure *roaring.Bitmap) (*roaring.Bitmap, map[uuid.UUID][]uuid.UUID, map[uuid.UUID][]uuid.UUID) {
+func (e *Engine) DeniedForWithMatches(s *Snapshot, subject uuid.UUID, op string, uaClosure *roaring.Bitmap) (*roaring.Bitmap, map[uuid.UUID][]uuid.UUID, map[uuid.UUID][]uuid.UUID) {
 	denied := roaring.New()
-	userMatches := make(map[uuid.UUID][]uuid.UUID) // User ID -> []OA ID
-	uaMatches := make(map[uuid.UUID][]uuid.UUID)   // UA ID -> []OA ID
+	subjectMatches := make(map[uuid.UUID][]uuid.UUID) // Subject ID -> []OA ID
+	uaMatches := make(map[uuid.UUID][]uuid.UUID)      // UA ID -> []OA ID
 
 	// UA-level prohibitions
 	it := uaClosure.Iterator()
@@ -214,8 +214,8 @@ func (e *Engine) DeniedForWithMatches(s *Snapshot, user uuid.UUID, op string, ua
 		}
 	}
 
-	// User-level prohibitions
-	if opMap := s.userProhibits[user]; opMap != nil {
+	// Subject-level prohibitions
+	if opMap := s.subjectProhibits[subject]; opMap != nil {
 		if targets := opMap[op]; targets != nil {
 			oaIDs := []uuid.UUID{}
 			tit := targets.Iterator()
@@ -226,16 +226,16 @@ func (e *Engine) DeniedForWithMatches(s *Snapshot, user uuid.UUID, op string, ua
 				denied.Or(e.oaNodeDescendants(s, oaIdx))
 			}
 			if len(oaIDs) > 0 {
-				userMatches[user] = oaIDs
+				subjectMatches[subject] = oaIDs
 			}
 		}
 	}
 
-	return denied, userMatches, uaMatches
+	return denied, subjectMatches, uaMatches
 }
 
-func (e *Engine) deniedFor(s *Snapshot, user uuid.UUID, op string, uaClosure *roaring.Bitmap) *roaring.Bitmap {
-	if b, ok := e.caches.DenyCache.Get(user, op); ok {
+func (e *Engine) deniedFor(s *Snapshot, subject uuid.UUID, op string, uaClosure *roaring.Bitmap) *roaring.Bitmap {
+	if b, ok := e.caches.DenyCache.Get(subject, op); ok {
 		return b
 	}
 
@@ -260,8 +260,8 @@ func (e *Engine) deniedFor(s *Snapshot, user uuid.UUID, op string, uaClosure *ro
 		}
 	}
 
-	// user-level prohibitions (also expand)
-	if opMap := s.userProhibits[user]; opMap != nil {
+	// subject-level prohibitions (also expand)
+	if opMap := s.subjectProhibits[subject]; opMap != nil {
 		if targets := opMap[op]; targets != nil {
 			tit := targets.Iterator()
 			for tit.HasNext() {
@@ -271,11 +271,11 @@ func (e *Engine) deniedFor(s *Snapshot, user uuid.UUID, op string, uaClosure *ro
 		}
 	}
 
-	e.caches.DenyCache.Put(user, op, denied)
+	e.caches.DenyCache.Put(subject, op, denied)
 	return denied
 }
 
-func (e *Engine) Decide(ctx context.Context, userID, objectID uuid.UUID, op string) (bool, error) {
+func (e *Engine) Decide(ctx context.Context, subjectID, objectID uuid.UUID, op string) (bool, error) {
 	s := e.Snapshot()
 	if s == nil {
 		if err := e.Refresh(ctx); err != nil {
@@ -285,27 +285,27 @@ func (e *Engine) Decide(ctx context.Context, userID, objectID uuid.UUID, op stri
 	}
 
 	// Decision cache hit?
-	if allowed, ok := e.caches.Decisions.Get(userID, objectID, op, s.Version); ok {
+	if allowed, ok := e.caches.Decisions.Get(subjectID, objectID, op, s.Version); ok {
 		return allowed, nil
 	}
 
-	uaClosure := e.userUAClosure(s, userID)
+	uaClosure := e.subjectUAClosure(s, subjectID)
 	oaClosure := e.objectOAClosure(s, objectID)
 
 	// PC scope gate
 	pcs := commonPCs(s, uaClosure, oaClosure)
 	if pcs.IsEmpty() {
-		e.caches.Decisions.Put(userID, objectID, op, false, s.Version)
+		e.caches.Decisions.Put(subjectID, objectID, op, false, s.Version)
 		return false, nil
 	}
 
-	// Compute user and object policy classes
-	userPCs := roaring.New()
+	// Compute subject and object policy classes
+	subjectPCs := roaring.New()
 	it := uaClosure.Iterator()
 	for it.HasNext() {
 		ua := it.Next()
 		if b := s.uaToPCs[ua]; b != nil {
-			userPCs.Or(b)
+			subjectPCs.Or(b)
 		}
 	}
 
@@ -318,15 +318,15 @@ func (e *Engine) Decide(ctx context.Context, userID, objectID uuid.UUID, op stri
 		}
 	}
 
-	userPCs.And(objPCs)
-	if userPCs.IsEmpty() {
+	subjectPCs.And(objPCs)
+	if subjectPCs.IsEmpty() {
 		// No shared policy class => deny (and cache it)
-		e.caches.Decisions.Put(userID, objectID, op, false, s.Version)
+		e.caches.Decisions.Put(subjectID, objectID, op, false, s.Version)
 		return false, nil
 	}
 
-	allowedBmp := e.allowedFor(s, userID, op, uaClosure)
-	deniedBmp := e.deniedFor(s, userID, op, uaClosure)
+	allowedBmp := e.allowedFor(s, subjectID, op, uaClosure)
+	deniedBmp := e.deniedFor(s, subjectID, op, uaClosure)
 
 	// effective = (allowed - denied) ∩ oaClosure
 	effective := allowedBmp.Clone()
@@ -335,7 +335,7 @@ func (e *Engine) Decide(ctx context.Context, userID, objectID uuid.UUID, op stri
 
 	allowed := !effective.IsEmpty()
 
-	e.caches.Decisions.Put(userID, objectID, op, allowed, s.Version)
+	e.caches.Decisions.Put(subjectID, objectID, op, allowed, s.Version)
 	return allowed, nil
 }
 
@@ -348,13 +348,13 @@ func (e *Engine) applyInvalidations(inv *invalidation) {
 		e.caches.OANodeClosure.Delete(oaIdx)
 	}
 
-	// 2) UA closure changes => user UA-closure + any derived caches become stale
+	// 2) UA closure changes => subject UA-closure + any derived caches become stale
 	// (allow/deny/decisions depend on UA closure)
-	for u := range inv.usersUAClosure {
+	for u := range inv.subjectsUAClosure {
 		e.caches.UACache.Delete(u)
-		e.caches.AllowCache.DeleteUser(u)
-		e.caches.DenyCache.DeleteUser(u)
-		e.caches.Decisions.DeleteUser(u)
+		e.caches.AllowCache.DeleteSubject(u)
+		e.caches.DenyCache.DeleteSubject(u)
+		e.caches.Decisions.DeleteSubject(u)
 	}
 
 	// 3) OA closure changes => object OA-closure + any decisions involving that object become stale
@@ -363,38 +363,38 @@ func (e *Engine) applyInvalidations(inv *invalidation) {
 		e.caches.Decisions.DeleteObject(o)
 	}
 
-	// 4) Dedup ops across allow/deny invalidations (avoid double DeleteUserOp calls)
-	// opsByUser[u] = union(inv.userAllowOp[u], inv.userDenyOp[u])
-	opsByUser := make(map[uuid.UUID]map[string]struct{}, len(inv.userAllowOp)+len(inv.userDenyOp))
+	// 4) Dedup ops across allow/deny invalidations (avoid double DeleteSubjectOp calls)
+	// opsBySubject[u] = union(inv.subjectAllowOp[u], inv.subjectDenyOp[u])
+	opsBySubject := make(map[uuid.UUID]map[string]struct{}, len(inv.subjectAllowOp)+len(inv.subjectDenyOp))
 
-	for u, ops := range inv.userAllowOp {
-		if opsByUser[u] == nil {
-			opsByUser[u] = make(map[string]struct{}, len(ops))
+	for u, ops := range inv.subjectAllowOp {
+		if opsBySubject[u] == nil {
+			opsBySubject[u] = make(map[string]struct{}, len(ops))
 		}
 		for op := range ops {
-			opsByUser[u][op] = struct{}{}
+			opsBySubject[u][op] = struct{}{}
 		}
 	}
-	for u, ops := range inv.userDenyOp {
-		if opsByUser[u] == nil {
-			opsByUser[u] = make(map[string]struct{}, len(ops))
+	for u, ops := range inv.subjectDenyOp {
+		if opsBySubject[u] == nil {
+			opsBySubject[u] = make(map[string]struct{}, len(ops))
 		}
 		for op := range ops {
-			opsByUser[u][op] = struct{}{}
+			opsBySubject[u][op] = struct{}{}
 		}
 	}
 
-	// 5) Invalidate (user,op) derived caches + decisions
-	for u, ops := range opsByUser {
+	// 5) Invalidate (subject,op) derived caches + decisions
+	for u, ops := range opsBySubject {
 		for op := range ops {
 			// Safe to call even if not present
-			e.caches.AllowCache.DeleteUserOp(u, op)
-			e.caches.DenyCache.DeleteUserOp(u, op)
-			e.caches.Decisions.DeleteUserOp(u, op)
+			e.caches.AllowCache.DeleteSubjectOp(u, op)
+			e.caches.DenyCache.DeleteSubjectOp(u, op)
+			e.caches.Decisions.DeleteSubjectOp(u, op)
 		}
 	}
-	for u := range inv.usersDecisionsOnly {
-		e.caches.Decisions.DeleteUser(u)
+	for u := range inv.subjectsDecisionsOnly {
+		e.caches.Decisions.DeleteSubject(u)
 	}
 	for o := range inv.objectsDecisionsOnly {
 		e.caches.Decisions.DeleteObject(o)

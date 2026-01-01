@@ -15,7 +15,7 @@ import (
 
 // Authorize handles authorization requests
 // @Summary Authorize request
-// @Description Checks if a user is allowed to perform an operation on an object
+// @Description Checks if a subject is allowed to perform an operation on an object
 // @Tags authorization
 // @Accept json
 // @Produce json
@@ -40,7 +40,7 @@ func (s *Server) Authorize(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	allowed, err := s.engine.Decide(r.Context(), req.UserID, req.ObjectID, req.Operation)
+	allowed, err := s.engine.Decide(r.Context(), req.SubjectID, req.ObjectID, req.Operation)
 	if err != nil {
 		httputil.RespondError(w, http.StatusInternalServerError, "DECISION_ERROR", err.Error())
 		return
@@ -85,12 +85,12 @@ func (s *Server) AuthorizeExplain(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Compute closures (reuse engine logic)
-	uaClosure := s.engine.UserUAClosure(snap, req.UserID)
+	uaClosure := s.engine.SubjectUAClosure(snap, req.SubjectID)
 	oaClosure := s.engine.ObjectOAClosure(snap, req.ObjectID)
 
 	// Get allow/deny sets with matches
-	allowSet, uaOAMatches := s.engine.AllowedForWithMatches(snap, req.UserID, req.Operation, uaClosure)
-	denySet, userDenyMatches, uaDenyMatches := s.engine.DeniedForWithMatches(snap, req.UserID, req.Operation, uaClosure)
+	allowSet, uaOAMatches := s.engine.AllowedForWithMatches(snap, req.SubjectID, req.Operation, uaClosure)
+	denySet, subjectDenyMatches, uaDenyMatches := s.engine.DeniedForWithMatches(snap, req.SubjectID, req.Operation, uaClosure)
 
 	// Convert bitmaps to UUID lists
 	subjectClosure := bitmapToUUIDs(uaClosure, snap.UAByIdx())
@@ -108,7 +108,7 @@ func (s *Server) AuthorizeExplain(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Query database to get prohibition IDs that matched
-	prohibitions, err := s.engine.GetDB().GetProhibitionsBySubjectOA(r.Context(), tenantID, userDenyMatches, uaDenyMatches, req.Operation)
+	prohibitions, err := s.engine.GetDB().GetProhibitionsBySubjectOA(r.Context(), tenantID, subjectDenyMatches, uaDenyMatches, req.Operation)
 	if err != nil {
 		httputil.RespondError(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return
@@ -194,12 +194,12 @@ func (s *Server) Evaluate(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// Compute closures
-		uaClosure := s.engine.UserUAClosure(snap, subjectID)
+		uaClosure := s.engine.SubjectUAClosure(snap, subjectID)
 		oaClosure := s.engine.ObjectOAClosure(snap, objectID)
 
 		// Get allow/deny sets with matches
 		allowSet, uaOAMatches := s.engine.AllowedForWithMatches(snap, subjectID, req.Action, uaClosure)
-		denySet, userDenyMatches, uaDenyMatches := s.engine.DeniedForWithMatches(snap, subjectID, req.Action, uaClosure)
+		denySet, subjectDenyMatches, uaDenyMatches := s.engine.DeniedForWithMatches(snap, subjectID, req.Action, uaClosure)
 
 		// Query database to get association IDs that matched
 		associations, err := s.engine.GetDB().GetAssociationsByUAOA(r.Context(), tenantID, uaOAMatches, req.Action)
@@ -213,7 +213,7 @@ func (s *Server) Evaluate(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// Query database to get prohibition IDs that matched
-		prohibitions, err := s.engine.GetDB().GetProhibitionsBySubjectOA(r.Context(), tenantID, userDenyMatches, uaDenyMatches, req.Action)
+		prohibitions, err := s.engine.GetDB().GetProhibitionsBySubjectOA(r.Context(), tenantID, subjectDenyMatches, uaDenyMatches, req.Action)
 		if err != nil {
 			httputil.RespondError(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 			return

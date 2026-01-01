@@ -306,7 +306,7 @@ func CreateSubject(w http.ResponseWriter, r *http.Request) {
 		Email:       req.Email,
 		Display:     req.Display,
 		DisplayName: displayName,
-		Kind:        "user",
+		Kind:        "subject",
 		Attributes:  make(map[string]string),
 		Tags:        []string{},
 		CreatedAt:   time.Now(),
@@ -389,8 +389,8 @@ func DeleteSubject(w http.ResponseWriter, r *http.Request) {
 	respondError(w, http.StatusNotFound, "NOT_FOUND", "Subject not found")
 }
 
-// ListSubjectGroups returns mock subject groups
-func ListSubjectGroups(w http.ResponseWriter, r *http.Request) {
+// ListSubjectSets returns mock subject sets
+func ListSubjectSets(w http.ResponseWriter, r *http.Request) {
 	data := GetMockData()
 
 	// Get query parameter and clean it up
@@ -407,7 +407,7 @@ func ListSubjectGroups(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var filtered []api.SubjectSet
-	for _, sg := range data.SubjectGroups {
+	for _, sg := range data.SubjectSets {
 		if query == "" || matchesQuery(sg.Name, query) {
 			filtered = append(filtered, sg)
 		}
@@ -418,10 +418,10 @@ func ListSubjectGroups(w http.ResponseWriter, r *http.Request) {
 		filtered = filtered[:limit]
 	}
 
-	total := len(data.SubjectGroups)
+	total := len(data.SubjectSets)
 	if query != "" {
 		matchingCount := 0
-		for _, sg := range data.SubjectGroups {
+		for _, sg := range data.SubjectSets {
 			if matchesQuery(sg.Name, query) {
 				matchingCount++
 			}
@@ -435,7 +435,7 @@ func ListSubjectGroups(w http.ResponseWriter, r *http.Request) {
 		nextCursor = &cursor
 	}
 
-	response := api.SearchResponse[api.SubjectGroup]{
+	response := api.SearchResponse[api.SubjectSet]{
 		Items:      filtered,
 		NextCursor: nextCursor,
 		Total:      &total,
@@ -444,17 +444,17 @@ func ListSubjectGroups(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(response)
 }
 
-// GetSubjectGroup returns a mock subject group by ID
-func GetSubjectGroup(w http.ResponseWriter, r *http.Request) {
+// GetSubjectSet returns a mock subject set by ID
+func GetSubjectSet(w http.ResponseWriter, r *http.Request) {
 	data := GetMockData()
 	idStr := chi.URLParam(r, "id")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
-		respondError(w, http.StatusBadRequest, "INVALID_ID", "Invalid group ID")
+		respondError(w, http.StatusBadRequest, "INVALID_ID", "Invalid subject set ID")
 		return
 	}
 
-	for _, sg := range data.SubjectGroups {
+	for _, sg := range data.SubjectSets {
 		if sg.ID == id {
 			w.Header().Set("Content-Type", "application/json")
 			json.NewEncoder(w).Encode(sg)
@@ -462,28 +462,28 @@ func GetSubjectGroup(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	respondError(w, http.StatusNotFound, "NOT_FOUND", "Subject group not found")
+	respondError(w, http.StatusNotFound, "NOT_FOUND", "Subject set not found")
 }
 
-// CreateSubjectGroup creates a mock subject group
-func CreateSubjectGroup(w http.ResponseWriter, r *http.Request) {
+// CreateSubjectSet creates a mock subject set
+func CreateSubjectSet(w http.ResponseWriter, r *http.Request) {
 	data := GetMockData()
-	var req api.CreateSubjectGroupRequest
+	var req api.CreateSubjectSetRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		respondError(w, http.StatusBadRequest, "INVALID_REQUEST", err.Error())
 		return
 	}
 
-	newGroup := api.SubjectSet{
+	newSet := api.SubjectSet{
 		ID:        uuid.New(),
 		Name:      req.Name,
 		CreatedAt: time.Now(),
 	}
-	data.SubjectGroups = append(data.SubjectGroups, newGroup)
+	data.SubjectSets = append(data.SubjectSets, newSet)
 	data.Revision++
 
-	response := api.SubjectGroupResponse{
-		Group:    newGroup,
+	response := api.SubjectSetResponse{
+		Group:    newSet,
 		Revision: data.Revision,
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -491,29 +491,29 @@ func CreateSubjectGroup(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(response)
 }
 
-// UpdateSubjectGroup updates a mock subject group
-func UpdateSubjectGroup(w http.ResponseWriter, r *http.Request) {
+// UpdateSubjectSet updates a mock subject set
+func UpdateSubjectSet(w http.ResponseWriter, r *http.Request) {
 	data := GetMockData()
 	idStr := chi.URLParam(r, "id")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
-		respondError(w, http.StatusBadRequest, "INVALID_ID", "Invalid group ID")
+		respondError(w, http.StatusBadRequest, "INVALID_ID", "Invalid subject set ID")
 		return
 	}
 
-	var req api.UpdateSubjectGroupRequest
+	var req api.UpdateSubjectSetRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		respondError(w, http.StatusBadRequest, "INVALID_REQUEST", err.Error())
 		return
 	}
 
-	for i, sg := range data.SubjectGroups {
+	for i, sg := range data.SubjectSets {
 		if sg.ID == id {
-			data.SubjectGroups[i].Name = req.Name
+			data.SubjectSets[i].Name = req.Name
 			data.Revision++
 
-			response := api.SubjectGroupResponse{
-				Group:    data.SubjectGroups[i],
+			response := api.SubjectSetResponse{
+				Group:    data.SubjectSets[i],
 				Revision: data.Revision,
 			}
 			w.Header().Set("Content-Type", "application/json")
@@ -522,32 +522,32 @@ func UpdateSubjectGroup(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	respondError(w, http.StatusNotFound, "NOT_FOUND", "Subject group not found")
+	respondError(w, http.StatusNotFound, "NOT_FOUND", "Subject set not found")
 }
 
-// DeleteSubjectGroup deletes a mock subject group
-func DeleteSubjectGroup(w http.ResponseWriter, r *http.Request) {
+// DeleteSubjectSet deletes a mock subject set
+func DeleteSubjectSet(w http.ResponseWriter, r *http.Request) {
 	data := GetMockData()
 	idStr := chi.URLParam(r, "id")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
-		respondError(w, http.StatusBadRequest, "INVALID_ID", "Invalid group ID")
+		respondError(w, http.StatusBadRequest, "INVALID_ID", "Invalid subject set ID")
 		return
 	}
 
-	for i, sg := range data.SubjectGroups {
+	for i, sg := range data.SubjectSets {
 		if sg.ID == id {
-			data.SubjectGroups = append(data.SubjectGroups[:i], data.SubjectGroups[i+1:]...)
+			data.SubjectSets = append(data.SubjectSets[:i], data.SubjectSets[i+1:]...)
 			data.Revision++
 			w.WriteHeader(http.StatusNoContent)
 			return
 		}
 	}
 
-	respondError(w, http.StatusNotFound, "NOT_FOUND", "Subject group not found")
+	respondError(w, http.StatusNotFound, "NOT_FOUND", "Subject set not found")
 }
 
-// Similar functions for Objects, ObjectGroups, Relationships, Rules, Denies, etc.
+// Similar functions for Objects, ObjectSets, Relationships, Rules, Denies, etc.
 // For brevity, I'll create a few key ones and you can extend them
 
 // ListObjects returns mock objects
@@ -676,8 +676,8 @@ func CreateObject(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(response)
 }
 
-// ListObjectGroups returns mock object groups
-func ListObjectGroups(w http.ResponseWriter, r *http.Request) {
+// ListObjectSets returns mock object sets
+func ListObjectSets(w http.ResponseWriter, r *http.Request) {
 	data := GetMockData()
 
 	// Get query parameter and clean it up
@@ -694,7 +694,7 @@ func ListObjectGroups(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var filtered []api.ObjectSet
-	for _, og := range data.ObjectGroups {
+	for _, og := range data.ObjectSets {
 		if query == "" || matchesQuery(og.Name, query) {
 			filtered = append(filtered, og)
 		}
@@ -705,10 +705,10 @@ func ListObjectGroups(w http.ResponseWriter, r *http.Request) {
 		filtered = filtered[:limit]
 	}
 
-	total := len(data.ObjectGroups)
+	total := len(data.ObjectSets)
 	if query != "" {
 		matchingCount := 0
-		for _, og := range data.ObjectGroups {
+		for _, og := range data.ObjectSets {
 			if matchesQuery(og.Name, query) {
 				matchingCount++
 			}
@@ -731,8 +731,8 @@ func ListObjectGroups(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(response)
 }
 
-// GetObjectGroup returns a mock object group by ID
-func GetObjectGroup(w http.ResponseWriter, r *http.Request) {
+// GetObjectSet returns a mock object set by ID
+func GetObjectSet(w http.ResponseWriter, r *http.Request) {
 	data := GetMockData()
 	idStr := chi.URLParam(r, "id")
 	id, err := uuid.Parse(idStr)
@@ -741,7 +741,7 @@ func GetObjectGroup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	for _, og := range data.ObjectGroups {
+	for _, og := range data.ObjectSets {
 		if og.ID == id {
 			w.Header().Set("Content-Type", "application/json")
 			json.NewEncoder(w).Encode(og)
@@ -871,8 +871,8 @@ func GetGraphSummary(w http.ResponseWriter, r *http.Request) {
 	response := api.GraphSummaryResponse{
 		Subjects:      len(data.Subjects),
 		Objects:       len(data.Objects),
-		SubjectSets:   len(data.SubjectGroups),
-		ObjectSets:    len(data.ObjectGroups),
+		SubjectSets:   len(data.SubjectSets),
+		ObjectSets:    len(data.ObjectSets),
 		Relationships: len(data.Relationships),
 		Rules:         len(data.Rules),
 		Denies:        len(data.Denies),
@@ -906,7 +906,7 @@ func GraphSearch(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	for _, sg := range data.SubjectGroups {
+	for _, sg := range data.SubjectSets {
 		if matchesQuery(sg.Name, query) {
 			nodes = append(nodes, api.GraphNode{
 				ID:   sg.ID,
@@ -935,10 +935,10 @@ func Authorize(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Simple mock logic: allow if user exists in mock data
+	// Simple mock logic: allow if subject exists in mock data
 	allowed := false
 	for _, s := range data.Subjects {
-		if s.ID == req.UserID {
+		if s.ID == req.SubjectID {
 			allowed = true
 			break
 		}
@@ -1012,9 +1012,9 @@ func ExportPolicy(w http.ResponseWriter, r *http.Request) {
 	bundle := api.PolicyBundle{
 		Revision:      data.Revision,
 		Subjects:      data.Subjects,
-		SubjectSets:   data.SubjectGroups,
+		SubjectSets:   data.SubjectSets,
 		Objects:       data.Objects,
-		ObjectSets:    data.ObjectGroups,
+		ObjectSets:    data.ObjectSets,
 		Relationships: data.Relationships,
 		Rules:         data.Rules,
 		Denies:        data.Denies,
@@ -1096,25 +1096,25 @@ func DeleteObject(w http.ResponseWriter, r *http.Request) {
 	respondError(w, http.StatusNotFound, "NOT_FOUND", "Object not found")
 }
 
-// CreateObjectGroup creates a mock object group
-func CreateObjectGroup(w http.ResponseWriter, r *http.Request) {
+// CreateObjectSet creates a mock object set
+func CreateObjectSet(w http.ResponseWriter, r *http.Request) {
 	data := GetMockData()
-	var req api.CreateObjectGroupRequest
+	var req api.CreateObjectSetRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		respondError(w, http.StatusBadRequest, "INVALID_REQUEST", err.Error())
 		return
 	}
 
-	newGroup := api.ObjectSet{
+	newSet := api.ObjectSet{
 		ID:        uuid.New(),
 		Name:      req.Name,
 		CreatedAt: time.Now(),
 	}
-	data.ObjectGroups = append(data.ObjectGroups, newGroup)
+	data.ObjectSets = append(data.ObjectSets, newSet)
 	data.Revision++
 
-	response := api.ObjectGroupResponse{
-		Group:    newGroup,
+	response := api.ObjectSetResponse{
+		Group:    newSet,
 		Revision: data.Revision,
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -1122,29 +1122,29 @@ func CreateObjectGroup(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(response)
 }
 
-// UpdateObjectGroup updates a mock object group
-func UpdateObjectGroup(w http.ResponseWriter, r *http.Request) {
+// UpdateObjectSet updates a mock object set
+func UpdateObjectSet(w http.ResponseWriter, r *http.Request) {
 	data := GetMockData()
 	idStr := chi.URLParam(r, "id")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
-		respondError(w, http.StatusBadRequest, "INVALID_ID", "Invalid group ID")
+		respondError(w, http.StatusBadRequest, "INVALID_ID", "Invalid object set ID")
 		return
 	}
 
-	var req api.UpdateObjectGroupRequest
+	var req api.UpdateObjectSetRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		respondError(w, http.StatusBadRequest, "INVALID_REQUEST", err.Error())
 		return
 	}
 
-	for i, og := range data.ObjectGroups {
+	for i, og := range data.ObjectSets {
 		if og.ID == id {
-			data.ObjectGroups[i].Name = req.Name
+			data.ObjectSets[i].Name = req.Name
 			data.Revision++
 
-			response := api.ObjectGroupResponse{
-				Group:    data.ObjectGroups[i],
+			response := api.ObjectSetResponse{
+				Group:    data.ObjectSets[i],
 				Revision: data.Revision,
 			}
 			w.Header().Set("Content-Type", "application/json")
@@ -1156,26 +1156,26 @@ func UpdateObjectGroup(w http.ResponseWriter, r *http.Request) {
 	respondError(w, http.StatusNotFound, "NOT_FOUND", "Object group not found")
 }
 
-// DeleteObjectGroup deletes a mock object group
-func DeleteObjectGroup(w http.ResponseWriter, r *http.Request) {
+// DeleteObjectSet deletes a mock object set
+func DeleteObjectSet(w http.ResponseWriter, r *http.Request) {
 	data := GetMockData()
 	idStr := chi.URLParam(r, "id")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
-		respondError(w, http.StatusBadRequest, "INVALID_ID", "Invalid group ID")
+		respondError(w, http.StatusBadRequest, "INVALID_ID", "Invalid object set ID")
 		return
 	}
 
-	for i, og := range data.ObjectGroups {
+	for i, og := range data.ObjectSets {
 		if og.ID == id {
-			data.ObjectGroups = append(data.ObjectGroups[:i], data.ObjectGroups[i+1:]...)
+			data.ObjectSets = append(data.ObjectSets[:i], data.ObjectSets[i+1:]...)
 			data.Revision++
 			w.WriteHeader(http.StatusNoContent)
 			return
 		}
 	}
 
-	respondError(w, http.StatusNotFound, "NOT_FOUND", "Object group not found")
+	respondError(w, http.StatusNotFound, "NOT_FOUND", "Object set not found")
 }
 
 // CreateRelationship creates a mock relationship
@@ -1453,7 +1453,7 @@ func AuthorizeExplain(w http.ResponseWriter, r *http.Request) {
 		Allowed:  true,
 		Revision: data.Revision,
 	}
-	response.Explain.SubjectClosure = []uuid.UUID{req.UserID}
+	response.Explain.SubjectClosure = []uuid.UUID{req.SubjectID}
 	response.Explain.ObjectClosure = []uuid.UUID{req.ObjectID}
 	response.Explain.AllowHits = []uuid.UUID{}
 	response.Explain.DenyHits = []uuid.UUID{}
@@ -1546,7 +1546,7 @@ func ImportPolicy(w http.ResponseWriter, r *http.Request) {
 	applied += len(req.Bundle.Subjects)
 
 	// Add subject sets
-	data.SubjectGroups = append(data.SubjectGroups, req.Bundle.SubjectSets...)
+	data.SubjectSets = append(data.SubjectSets, req.Bundle.SubjectSets...)
 	applied += len(req.Bundle.SubjectSets)
 
 	// Add objects
@@ -1554,7 +1554,7 @@ func ImportPolicy(w http.ResponseWriter, r *http.Request) {
 	applied += len(req.Bundle.Objects)
 
 	// Add object sets
-	data.ObjectGroups = append(data.ObjectGroups, req.Bundle.ObjectSets...)
+	data.ObjectSets = append(data.ObjectSets, req.Bundle.ObjectSets...)
 	applied += len(req.Bundle.ObjectSets)
 
 	// Add relationships
@@ -1599,17 +1599,17 @@ func AddSubjectSetMembers(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Find the subject set
-	for i, sg := range data.SubjectGroups {
+	for i, sg := range data.SubjectSets {
 		if sg.ID == setID {
 			// Add new member IDs
 			for _, idStr := range req.SubjectIDs {
 				if id, err := uuid.Parse(idStr); err == nil {
-					data.SubjectGroups[i].MemberSubjectIDs = append(data.SubjectGroups[i].MemberSubjectIDs, id)
+					data.SubjectSets[i].MemberSubjectIDs = append(data.SubjectSets[i].MemberSubjectIDs, id)
 				}
 			}
 			data.Revision++
 			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(data.SubjectGroups[i])
+			json.NewEncoder(w).Encode(data.SubjectSets[i])
 			return
 		}
 	}
@@ -1636,16 +1636,16 @@ func RemoveSubjectSetMember(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Find the subject set
-	for i, sg := range data.SubjectGroups {
+	for i, sg := range data.SubjectSets {
 		if sg.ID == setID {
 			// Remove member IDs
 			for _, idStr := range req.SubjectIDs {
 				if id, err := uuid.Parse(idStr); err == nil {
-					for j, memberID := range data.SubjectGroups[i].MemberSubjectIDs {
+					for j, memberID := range data.SubjectSets[i].MemberSubjectIDs {
 						if memberID == id {
-							data.SubjectGroups[i].MemberSubjectIDs = append(
-								data.SubjectGroups[i].MemberSubjectIDs[:j],
-								data.SubjectGroups[i].MemberSubjectIDs[j+1:]...)
+							data.SubjectSets[i].MemberSubjectIDs = append(
+								data.SubjectSets[i].MemberSubjectIDs[:j],
+								data.SubjectSets[i].MemberSubjectIDs[j+1:]...)
 							break
 						}
 					}
@@ -1653,7 +1653,7 @@ func RemoveSubjectSetMember(w http.ResponseWriter, r *http.Request) {
 			}
 			data.Revision++
 			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(data.SubjectGroups[i])
+			json.NewEncoder(w).Encode(data.SubjectSets[i])
 			return
 		}
 	}
@@ -1680,17 +1680,17 @@ func AddObjectSetMembers(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Find the object set
-	for i, og := range data.ObjectGroups {
+	for i, og := range data.ObjectSets {
 		if og.ID == setID {
 			// Add new member IDs
 			for _, idStr := range req.ObjectIDs {
 				if id, err := uuid.Parse(idStr); err == nil {
-					data.ObjectGroups[i].MemberObjectIDs = append(data.ObjectGroups[i].MemberObjectIDs, id)
+					data.ObjectSets[i].MemberObjectIDs = append(data.ObjectSets[i].MemberObjectIDs, id)
 				}
 			}
 			data.Revision++
 			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(data.ObjectGroups[i])
+			json.NewEncoder(w).Encode(data.ObjectSets[i])
 			return
 		}
 	}
@@ -1717,16 +1717,16 @@ func RemoveObjectSetMember(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Find the object set
-	for i, og := range data.ObjectGroups {
+	for i, og := range data.ObjectSets {
 		if og.ID == setID {
 			// Remove member IDs
 			for _, idStr := range req.ObjectIDs {
 				if id, err := uuid.Parse(idStr); err == nil {
-					for j, memberID := range data.ObjectGroups[i].MemberObjectIDs {
+					for j, memberID := range data.ObjectSets[i].MemberObjectIDs {
 						if memberID == id {
-							data.ObjectGroups[i].MemberObjectIDs = append(
-								data.ObjectGroups[i].MemberObjectIDs[:j],
-								data.ObjectGroups[i].MemberObjectIDs[j+1:]...)
+							data.ObjectSets[i].MemberObjectIDs = append(
+								data.ObjectSets[i].MemberObjectIDs[:j],
+								data.ObjectSets[i].MemberObjectIDs[j+1:]...)
 							break
 						}
 					}
@@ -1734,7 +1734,7 @@ func RemoveObjectSetMember(w http.ResponseWriter, r *http.Request) {
 			}
 			data.Revision++
 			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(data.ObjectGroups[i])
+			json.NewEncoder(w).Encode(data.ObjectSets[i])
 			return
 		}
 	}

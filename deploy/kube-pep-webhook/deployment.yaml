@@ -43,7 +43,7 @@ spec:
         - name: FAIL_MODE
           value: "fail_closed"
         - name: SUBJECT_ID_MODE
-          value: "username"
+          value: "subjectname"
         - name: ACTION_MODE
           value: "simple"
         - name: SDK_CACHE_MAX_ENTRIES

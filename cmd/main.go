@@ -15,7 +15,7 @@
 //
 // ## Advanced APIs
 //
-// For users who need specific access control models:
+// For subjects who need specific access control models:
 // - **RBAC (Role-Based):** /api/v1/rbac/*
 // - **ABAC (Attribute-Based):** /api/v1/abac/*
 // - **ReBAC (Relationship-Based):** /api/v1/rebac/*
@@ -56,7 +56,6 @@ import (
 	"github.com/kumarabd/policy-machine/internal/config"
 	"github.com/kumarabd/policy-machine/internal/metrics"
 	"github.com/kumarabd/policy-machine/internal/postgres"
-	"github.com/kumarabd/policy-machine/internal/seed"
 	"github.com/kumarabd/policy-machine/internal/server"
 	"github.com/kumarabd/policy-machine/pkg/engine"
 )
@@ -97,19 +96,29 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Seed database with initial data if tenant ID is provided
-	if configHandler.Engine.TenantID != "" {
-		ctx := context.Background()
-		if err := seed.Seed(ctx, dbHandler, configHandler.Engine.TenantID); err != nil {
-			log.Warn().Err(err).Msg("failed to seed database - continuing anyway")
-		} else {
-			log.Info().Msg("database seeded successfully")
-		}
-	}
+	// // Seed database with initial data if tenant ID is provided
+	// if configHandler.Engine.TenantID != "" {
+	// 	ctx := context.Background()
+	// 	if err := seed.Seed(ctx, dbHandler, configHandler.Engine.TenantID); err != nil {
+	// 		log.Warn().Err(err).Msg("failed to seed database - continuing anyway")
+	// 	} else {
+	// 		log.Info().Msg("database seeded successfully")
+	// 	}
+	// }
 
 	// Initialize a new engine with the logger, metrics handler, database handler, and engine configuration
 	engine := engine.New(log, metricsHandler, dbHandler, configHandler.Engine, nil, nil)
 	log.Info().Msg("engine initialized")
+
+	// Refresh engine snapshot to load data from database
+	if configHandler.Engine.TenantID != "" {
+		ctx := context.Background()
+		if err := engine.Refresh(ctx); err != nil {
+			log.Warn().Err(err).Msg("failed to refresh engine snapshot - continuing anyway")
+		} else {
+			log.Info().Msg("engine snapshot loaded successfully")
+		}
+	}
 
 	// Initialize both dataplane and controlplane servers
 	servers, err := server.NewServers(log, metricsHandler, configHandler.Server, engine)

@@ -58,10 +58,10 @@ func (s *Server) AddSubjectSetMembers(w http.ResponseWriter, r *http.Request) {
 		subjectIDs[i] = id
 	}
 
-	// Add assignment edges (USER -> UA)
+	// Add assignment edges (SUBJECT -> UA)
 	for _, subjectID := range subjectIDs {
 		edge := &postgres.AssignmentEdge{
-			ChildType:  postgres.NodeUser,
+			ChildType:  postgres.NodeSubject,
 			ChildID:    subjectID,
 			ParentType: postgres.NodeUA,
 			ParentID:   setID,
@@ -96,7 +96,7 @@ func (s *Server) AddSubjectSetMembers(w http.ResponseWriter, r *http.Request) {
 	response := api.SubjectSet{
 		ID:               ua.ID,
 		Name:             ua.Name,
-		Description:      "", // Description not stored in UserAttribute table
+		Description:      "", // Description not stored in SubjectAttribute table
 		ScopeID:          nil,
 		Tags:             []string{},
 		MemberSubjectIDs: memberIDs,
@@ -149,9 +149,9 @@ func (s *Server) RemoveSubjectSetMember(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	// Remove assignment edge (USER -> UA)
+	// Remove assignment edge (SUBJECT -> UA)
 	edge := &postgres.AssignmentEdge{
-		ChildType:  postgres.NodeUser,
+		ChildType:  postgres.NodeSubject,
 		ChildID:    subjectID,
 		ParentType: postgres.NodeUA,
 		ParentID:   setID,

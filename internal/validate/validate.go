@@ -87,7 +87,7 @@ func ValidateAssignmentEdgeCreate(ctx context.Context, tx *gorm.DB, tenantID str
 // ValidateEdgeType validates that the edge type combination is allowed
 func ValidateEdgeType(edge AssignmentEdge) error {
 	validCombinations := map[string]bool{
-		// USER -> UA
+		// SUBJECT -> UA
 		"USER->UA": true,
 		// UA -> UA
 		"UA->UA": true,

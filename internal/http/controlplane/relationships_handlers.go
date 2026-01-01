@@ -6,9 +6,9 @@ import (
 	"strconv"
 
 	"github.com/google/uuid"
+	httputil "github.com/kumarabd/policy-machine/internal/http"
 	"github.com/kumarabd/policy-machine/internal/mock"
 	"github.com/kumarabd/policy-machine/internal/postgres"
-	httputil "github.com/kumarabd/policy-machine/internal/http"
 	"github.com/kumarabd/policy-machine/internal/validate"
 	"gorm.io/gorm"
 )
@@ -204,7 +204,7 @@ func (s *Server) DeleteRelationship(w http.ResponseWriter, r *http.Request) {
 // Helper functions (exported for use in other handlers)
 func MapNodeTypeToUI(nt postgres.NodeType) string {
 	switch nt {
-	case postgres.NodeUser:
+	case postgres.NodeSubject:
 		return "subject"
 	case postgres.NodeUA:
 		return "subject-set"
@@ -218,7 +218,7 @@ func MapNodeTypeToUI(nt postgres.NodeType) string {
 }
 
 func InferRelationshipKind(childType, parentType postgres.NodeType) string {
-	if childType == postgres.NodeUser && parentType == postgres.NodeUA {
+	if childType == postgres.NodeSubject && parentType == postgres.NodeUA {
 		return "subject_member_of_set"
 	}
 	if childType == postgres.NodeUA && parentType == postgres.NodeUA {

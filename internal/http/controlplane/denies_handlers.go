@@ -8,9 +8,9 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	httputil "github.com/kumarabd/policy-machine/internal/http"
 	"github.com/kumarabd/policy-machine/internal/mock"
 	"github.com/kumarabd/policy-machine/internal/postgres"
-	httputil "github.com/kumarabd/policy-machine/internal/http"
 	"gorm.io/gorm"
 )
 
@@ -119,7 +119,7 @@ func (s *Server) CreateDeny(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Map subject type
-	subjectType := postgres.ProhibitUser
+	subjectType := postgres.ProhibitSubject
 	if req.Subject.Type == "subject-set" {
 		subjectType = postgres.ProhibitUA
 	}

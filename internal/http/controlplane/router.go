@@ -89,11 +89,11 @@ func (s *Server) registerRoutes(defaultTenantID string) {
 
 			// Subject Sets
 			r.Route("/subject-sets", func(r chi.Router) {
-				r.Get("/", s.ListSubjectGroups)
-				r.Post("/", s.CreateSubjectGroup)
-				r.Get("/{id}", s.GetSubjectGroup)
-				r.Patch("/{id}", s.UpdateSubjectGroup)
-				r.Delete("/{id}", s.DeleteSubjectGroup)
+				r.Get("/", s.ListSubjectSets)
+				r.Post("/", s.CreateSubjectSet)
+				r.Get("/{id}", s.GetSubjectSet)
+				r.Patch("/{id}", s.UpdateSubjectSet)
+				r.Delete("/{id}", s.DeleteSubjectSet)
 				r.Post("/{id}/members:add", s.AddSubjectSetMembers)
 				r.Post("/{id}/members:remove", s.RemoveSubjectSetMember)
 			})
@@ -109,11 +109,11 @@ func (s *Server) registerRoutes(defaultTenantID string) {
 
 			// Object Sets
 			r.Route("/object-sets", func(r chi.Router) {
-				r.Get("/", s.ListObjectGroups)
-				r.Post("/", s.CreateObjectGroup)
-				r.Get("/{id}", s.GetObjectGroup)
-				r.Patch("/{id}", s.UpdateObjectGroup)
-				r.Delete("/{id}", s.DeleteObjectGroup)
+				r.Get("/", s.ListObjectSets)
+				r.Post("/", s.CreateObjectSet)
+				r.Get("/{id}", s.GetObjectSet)
+				r.Patch("/{id}", s.UpdateObjectSet)
+				r.Delete("/{id}", s.DeleteObjectSet)
 				r.Post("/{id}/members:add", s.AddObjectSetMembers)
 				r.Post("/{id}/members:remove", s.RemoveObjectSetMember)
 			})

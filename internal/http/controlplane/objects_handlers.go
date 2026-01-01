@@ -286,10 +286,10 @@ func (s *Server) DeleteObject(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// ListObjectGroups returns paginated list of object sets
-func (s *Server) ListObjectGroups(w http.ResponseWriter, r *http.Request) {
+// ListObjectSets returns paginated list of object sets
+func (s *Server) ListObjectSets(w http.ResponseWriter, r *http.Request) {
 	if httputil.IsMockMode(r.Context()) {
-		mock.ListObjectGroups(w, r)
+		mock.ListObjectSets(w, r)
 		return
 	}
 
@@ -350,10 +350,10 @@ func (s *Server) ListObjectGroups(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(response)
 }
 
-// CreateObjectGroup creates a new object set
-func (s *Server) CreateObjectGroup(w http.ResponseWriter, r *http.Request) {
+// CreateObjectSet creates a new object set
+func (s *Server) CreateObjectSet(w http.ResponseWriter, r *http.Request) {
 	if httputil.IsMockMode(r.Context()) {
-		mock.CreateObjectGroup(w, r)
+		mock.CreateObjectSet(w, r)
 		return
 	}
 
@@ -398,10 +398,10 @@ func (s *Server) CreateObjectGroup(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(response)
 }
 
-// GetObjectGroup returns an object set by ID
-func (s *Server) GetObjectGroup(w http.ResponseWriter, r *http.Request) {
+// GetObjectSet returns an object set by ID
+func (s *Server) GetObjectSet(w http.ResponseWriter, r *http.Request) {
 	if httputil.IsMockMode(r.Context()) {
-		mock.GetObjectGroup(w, r)
+		mock.GetObjectSet(w, r)
 		return
 	}
 
@@ -450,10 +450,10 @@ func (s *Server) GetObjectGroup(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(group)
 }
 
-// UpdateObjectGroup updates an object set
-func (s *Server) UpdateObjectGroup(w http.ResponseWriter, r *http.Request) {
+// UpdateObjectSet updates an object set
+func (s *Server) UpdateObjectSet(w http.ResponseWriter, r *http.Request) {
 	if httputil.IsMockMode(r.Context()) {
-		mock.UpdateObjectGroup(w, r)
+		mock.UpdateObjectSet(w, r)
 		return
 	}
 
@@ -491,7 +491,7 @@ func (s *Server) UpdateObjectGroup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	oa, _ := s.engine.GetDB().GetObjectGroup(r.Context(), tenantID, id)
+	oa, _ := s.engine.GetDB().GetObjectSet(r.Context(), tenantID, id)
 
 	response := httputil.ObjectSetResponse{
 		Group: api.ObjectSet{
@@ -506,10 +506,10 @@ func (s *Server) UpdateObjectGroup(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(response)
 }
 
-// DeleteObjectGroup deletes an object set
-func (s *Server) DeleteObjectGroup(w http.ResponseWriter, r *http.Request) {
+// DeleteObjectSet deletes an object set
+func (s *Server) DeleteObjectSet(w http.ResponseWriter, r *http.Request) {
 	if httputil.IsMockMode(r.Context()) {
-		mock.DeleteObjectGroup(w, r)
+		mock.DeleteObjectSet(w, r)
 		return
 	}
 
@@ -522,7 +522,7 @@ func (s *Server) DeleteObjectGroup(w http.ResponseWriter, r *http.Request) {
 	idStr := chi.URLParam(r, "id")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
-		httputil.RespondError(w, http.StatusBadRequest, "INVALID_ID", "Invalid group ID")
+		httputil.RespondError(w, http.StatusBadRequest, "INVALID_ID", "Invalid object set ID")
 		return
 	}
 

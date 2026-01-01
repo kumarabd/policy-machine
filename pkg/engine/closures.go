@@ -5,23 +5,23 @@ import (
 	"github.com/google/uuid"
 )
 
-// UserUAClosure returns bitmap of UA indices reachable from user's assigned UAs (including them) (public for explain)
-func (e *Engine) UserUAClosure(s *Snapshot, userID uuid.UUID) *roaring.Bitmap {
-	return e.userUAClosure(s, userID)
+// SubjectUAClosure returns bitmap of UA indices reachable from subject's assigned UAs (including them) (public for explain)
+func (e *Engine) SubjectUAClosure(s *Snapshot, subjectID uuid.UUID) *roaring.Bitmap {
+	return e.subjectUAClosure(s, subjectID)
 }
 
-// userUAClosure returns bitmap of UA indices reachable from user's assigned UAs (including them)
-func (e *Engine) userUAClosure(s *Snapshot, userID uuid.UUID) *roaring.Bitmap {
-	if bmp, ok := e.caches.UACache.Get(userID); ok {
+// subjectUAClosure returns bitmap of UA indices reachable from subject's assigned UAs (including them)
+func (e *Engine) subjectUAClosure(s *Snapshot, subjectID uuid.UUID) *roaring.Bitmap {
+	if bmp, ok := e.caches.UACache.Get(subjectID); ok {
 		return bmp
 	}
 
 	out := roaring.New()
-	for _, ua := range s.userToUAs[userID] {
+	for _, ua := range s.subjectToUAs[subjectID] {
 		out.Or(e.uaNodeAllParents(s, ua))
 	}
 
-	e.caches.UACache.Put(userID, out)
+	e.caches.UACache.Put(subjectID, out)
 	return out
 }
 

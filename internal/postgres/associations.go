@@ -10,13 +10,13 @@ import (
 func CreateAssociation(ctx context.Context, db *gorm.DB, tenantID string, uaID, oaID uuid.UUID, ops []string) error {
 	return db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		assoc := Association{
-			TenantID:          tenantID,
-			UserAttributeID:   uaID,
-			ObjectAttributeID: oaID,
+			TenantID:           tenantID,
+			SubjectAttributeID: uaID,
+			ObjectAttributeID:  oaID,
 		}
 		// Upsert association
 		if err := tx.
-			Where("tenant_id = ? AND user_attribute_id = ? AND object_attribute_id = ?", tenantID, uaID, oaID).
+			Where("tenant_id = ? AND subject_attribute_id = ? AND object_attribute_id = ?", tenantID, uaID, oaID).
 			FirstOrCreate(&assoc).Error; err != nil {
 			return err
 		}

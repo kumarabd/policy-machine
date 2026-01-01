@@ -25,10 +25,10 @@ type Snapshot struct {
 	oaToPCs map[uint32]*roaring.Bitmap // OA idx -> PCs
 
 	// Assignment graphs
-	userToUAs     map[uuid.UUID][]uint32 // userID -> uaIdx children
-	uaParents     map[uint32][]uint32    // uaIdx -> parent uaIdxs
-	uaChildren    map[uint32][]uint32    // reverse uaParents
-	uaDirectUsers map[uint32][]uuid.UUID // reverse userToUAs
+	subjectToUAs     map[uuid.UUID][]uint32 // subjectID -> uaIdx children
+	uaParents        map[uint32][]uint32    // uaIdx -> parent uaIdxs
+	uaChildren       map[uint32][]uint32    // reverse uaParents
+	uaDirectSubjects map[uint32][]uuid.UUID // reverse subjectToUAs
 
 	objectToOAs     map[uuid.UUID][]uint32 // objectID -> oaIdx children
 	oaParents       map[uint32][]uint32    // oaIdx -> parent oaIdxs
@@ -39,10 +39,10 @@ type Snapshot struct {
 	assoc map[uint32]map[string]*roaring.Bitmap
 
 	// Prohibitions:
-	// - userProhibits[userID][op] => bitmap(OA indices)
+	// - subjectProhibits[subjectID][op] => bitmap(OA indices)
 	// - uaProhibits[uaIdx][op] => bitmap(OA indices)
-	userProhibits map[uuid.UUID]map[string]*roaring.Bitmap
-	uaProhibits   map[uint32]map[string]*roaring.Bitmap
+	subjectProhibits map[uuid.UUID]map[string]*roaring.Bitmap
+	uaProhibits      map[uint32]map[string]*roaring.Bitmap
 }
 
 // UAByIdx returns the UA ID array (for explain endpoint)
@@ -55,9 +55,9 @@ func (s *Snapshot) OAByIdx() []uuid.UUID {
 	return s.oaByIdx
 }
 
-func (s *Snapshot) UsersInUASubtree(root uint32) []uuid.UUID {
+func (s *Snapshot) SubjectsInUASubtree(root uint32) []uuid.UUID {
 	seenUA := map[uint32]struct{}{}
-	seenUser := map[uuid.UUID]struct{}{}
+	seenSubject := map[uuid.UUID]struct{}{}
 
 	queue := []uint32{root}
 	seenUA[root] = struct{}{}
@@ -69,8 +69,8 @@ func (s *Snapshot) UsersInUASubtree(root uint32) []uuid.UUID {
 			break
 		}
 		ua := queue[i]
-		for _, u := range s.uaDirectUsers[ua] {
-			seenUser[u] = struct{}{}
+		for _, u := range s.uaDirectSubjects[ua] {
+			seenSubject[u] = struct{}{}
 		}
 		for _, child := range s.uaChildren[ua] {
 			if _, ok := seenUA[child]; ok {
@@ -80,8 +80,8 @@ func (s *Snapshot) UsersInUASubtree(root uint32) []uuid.UUID {
 			queue = append(queue, child)
 		}
 	}
-	out := make([]uuid.UUID, 0, len(seenUser))
-	for u := range seenUser {
+	out := make([]uuid.UUID, 0, len(seenSubject))
+	for u := range seenSubject {
 		out = append(out, u)
 	}
 	return out

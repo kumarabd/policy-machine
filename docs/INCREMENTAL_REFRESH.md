@@ -52,7 +52,7 @@ type PolicyChange struct {
 
 #### 1. ASSIGNMENT_EDGE
 
-Represents assignment edge changes (user→UA, UA→UA, object→OA, etc.):
+Represents assignment edge changes (subject→UA, UA→UA, object→OA, etc.):
 
 ```json
 {
@@ -181,7 +181,7 @@ func (e *Engine) RefreshIncremental(ctx context.Context) error {
     e.cur.Store(next)
     
     // 6. Compute additional invalidations
-    e.computeUserOpInvalidationsFromOADescChanges(s, inv)
+    e.computeSubjectOpInvalidationsFromOADescChanges(s, inv)
     
     // 7. Apply invalidations
     e.applyInvalidations(inv)
@@ -360,14 +360,14 @@ func computeInvalidations(inv *invalidation, s *Snapshot, ch postgres.PolicyChan
     case "ASSIGNMENT_EDGE":
         // Analyze edge type
         if childType == USER && parentType == UA {
-            inv.usersUAClosure[childID] = struct{}{}
+            inv.subjectsUAClosure[childID] = struct{}{}
         }
         // ... more cases
         
     case "ASSOC_OP":
         // Association change affects allow cache
         uaIdx := s.uaIndex[uaID]
-        for _, u := range s.UsersInUASubtree(uaIdx) {
+        for _, u := range s.SubjectsInUASubtree(uaIdx) {
             inv.addAllow(u, op)
         }
         
@@ -377,7 +377,7 @@ func computeInvalidations(inv *invalidation, s *Snapshot, ch postgres.PolicyChan
             inv.addDeny(subjectID, op)
         } else {
             uaIdx := s.uaIndex[subjectID]
-            for _, u := range s.UsersInUASubtree(uaIdx) {
+            for _, u := range s.SubjectsInUASubtree(uaIdx) {
                 inv.addDeny(u, op)
             }
         }
@@ -391,16 +391,16 @@ The `invalidation` struct tracks what to invalidate:
 
 ```go
 type invalidation struct {
-    usersUAClosure   map[uuid.UUID]struct{}  // Users whose UA closure changed
+    subjectsUAClosure   map[uuid.UUID]struct{}  // Subjects whose UA closure changed
     objectsOAClosure map[uuid.UUID]struct{}   // Objects whose OA closure changed
     
-    userAllowOp map[uuid.UUID]map[string]struct{}  // (user, op) allow cache
-    userDenyOp  map[uuid.UUID]map[string]struct{}  // (user, op) deny cache
+    subjectAllowOp map[uuid.UUID]map[string]struct{}  // (subject, op) allow cache
+    subjectDenyOp  map[uuid.UUID]map[string]struct{}  // (subject, op) deny cache
     
     uaNodeClosures map[uint32]struct{}  // UA node closures to invalidate
     oaNodeClosures map[uint32]struct{}  // OA node closures to invalidate
     
-    usersDecisionsOnly   map[uuid.UUID]struct{}  // Only decisions (not closures)
+    subjectsDecisionsOnly   map[uuid.UUID]struct{}  // Only decisions (not closures)
     objectsDecisionsOnly map[uuid.UUID]struct{}  // Only decisions (not closures)
     oaDescClosures       map[uint32]struct{}      // OA descendant closures
 }
@@ -417,12 +417,12 @@ func (e *Engine) applyInvalidations(inv *invalidation) {
         e.uaNodeClosure.Delete(uaIdx)
     }
     
-    // 2. User closures and derived caches
-    for u := range inv.usersUAClosure {
+    // 2. Subject closures and derived caches
+    for u := range inv.subjectsUAClosure {
         e.uaCache.Delete(u)
-        e.allowCache.DeleteUser(u)
-        e.denyCache.DeleteUser(u)
-        e.decisions.DeleteUser(u)
+        e.allowCache.DeleteSubject(u)
+        e.denyCache.DeleteSubject(u)
+        e.decisions.DeleteSubject(u)
     }
     
     // 3. Object closures
@@ -432,10 +432,10 @@ func (e *Engine) applyInvalidations(inv *invalidation) {
     }
     
     // 4. Operation-specific
-    for u, ops := range inv.userAllowOp {
+    for u, ops := range inv.subjectAllowOp {
         for op := range ops {
-            e.allowCache.DeleteUserOp(u, op)
-            e.decisions.DeleteUserOp(u, op)
+            e.allowCache.DeleteSubjectOp(u, op)
+            e.decisions.DeleteSubjectOp(u, op)
         }
     }
     // ... similar for deny
@@ -569,14 +569,14 @@ After refresh, warmup frequently accessed entities:
 
 ```go
 func (e *Engine) Warmup(s *Snapshot, inv *invalidation) {
-    // Warm user closures
-    for u := range inv.usersUAClosure {
-        e.userUAClosure(s, u)
+    // Warm subject closures
+    for u := range inv.subjectsUAClosure {
+        e.subjectUAClosure(s, u)
     }
     
     // Warm operation caches
-    for u, ops := range inv.userAllowOp {
-        ua := e.userUAClosure(s, u)
+    for u, ops := range inv.subjectAllowOp {
+        ua := e.subjectUAClosure(s, u)
         for op := range ops {
             e.allowedFor(s, u, op, ua)
         }

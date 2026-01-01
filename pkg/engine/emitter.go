@@ -8,7 +8,7 @@ import (
 
 type DecisionEvent struct {
 	TenantID  string
-	UserID    uuid.UUID
+	SubjectID uuid.UUID
 	ObjectID  uuid.UUID
 	Operation string
 	Allowed   bool

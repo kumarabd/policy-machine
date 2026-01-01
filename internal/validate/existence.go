@@ -28,17 +28,15 @@ func validateNode(ctx context.Context, tx *gorm.DB, tenantID string, nodeType st
 	case "UA":
 		var count int64
 		if err := tx.WithContext(ctx).
-			Table("user_attributes").
+			Table("subject_attributes").
 			Where("tenant_id = ? AND id = ?", tenantID, nodeID).
-			Select("1").
-			Limit(1).
 			Count(&count).Error; err != nil {
 			return err
 		}
 		if count == 0 {
 			return ValidationError{
 				Code:    CodeMissingNode,
-				Message: fmt.Sprintf("user attribute (UA) %s does not exist for tenant %s", nodeID, tenantID),
+				Message: fmt.Sprintf("subject attribute (UA) %s does not exist for tenant %s", nodeID, tenantID),
 			}
 		}
 
@@ -47,8 +45,6 @@ func validateNode(ctx context.Context, tx *gorm.DB, tenantID string, nodeType st
 		if err := tx.WithContext(ctx).
 			Table("object_attributes").
 			Where("tenant_id = ? AND id = ?", tenantID, nodeID).
-			Select("1").
-			Limit(1).
 			Count(&count).Error; err != nil {
 			return err
 		}
@@ -64,8 +60,6 @@ func validateNode(ctx context.Context, tx *gorm.DB, tenantID string, nodeType st
 		if err := tx.WithContext(ctx).
 			Table("policy_classes").
 			Where("tenant_id = ? AND id = ?", tenantID, nodeID).
-			Select("1").
-			Limit(1).
 			Count(&count).Error; err != nil {
 			return err
 		}

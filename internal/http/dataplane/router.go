@@ -215,12 +215,12 @@ func (s *Server) SwaggerJSONHandler(w http.ResponseWriter, r *http.Request) {
 			"schemas": map[string]interface{}{
 				"AuthorizeRequest": map[string]interface{}{
 					"type":     "object",
-					"required": []string{"user_id", "object_id", "operation"},
+					"required": []string{"subject_id", "object_id", "operation"},
 					"properties": map[string]interface{}{
-						"user_id": map[string]interface{}{
+						"subject_id": map[string]interface{}{
 							"type":        "string",
 							"format":      "uuid",
-							"description": "UUID of the subject/user",
+							"description": "UUID of the subject/subject",
 						},
 						"object_id": map[string]interface{}{
 							"type":        "string",

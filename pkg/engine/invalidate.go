@@ -8,46 +8,46 @@ import (
 )
 
 type invalidation struct {
-	usersUAClosure   map[uuid.UUID]struct{} // invalidate UA closure (+ allow/deny all ops)
-	objectsOAClosure map[uuid.UUID]struct{} // invalidate OA closure
+	subjectsUAClosure map[uuid.UUID]struct{} // invalidate UA closure (+ allow/deny all ops)
+	objectsOAClosure  map[uuid.UUID]struct{} // invalidate OA closure
 
-	userAllowOp map[uuid.UUID]map[string]struct{}
-	userDenyOp  map[uuid.UUID]map[string]struct{}
+	subjectAllowOp map[uuid.UUID]map[string]struct{}
+	subjectDenyOp  map[uuid.UUID]map[string]struct{}
 
 	uaNodeClosures map[uint32]struct{}
 	oaNodeClosures map[uint32]struct{}
 
 	// decisions-only invalidations
-	usersDecisionsOnly   map[uuid.UUID]struct{}
-	objectsDecisionsOnly map[uuid.UUID]struct{}
-	oaDescClosures       map[uint32]struct{}
+	subjectsDecisionsOnly map[uuid.UUID]struct{}
+	objectsDecisionsOnly  map[uuid.UUID]struct{}
+	oaDescClosures        map[uint32]struct{}
 }
 
 func newInvalidation() *invalidation {
 	return &invalidation{
-		usersUAClosure:       make(map[uuid.UUID]struct{}),
-		objectsOAClosure:     make(map[uuid.UUID]struct{}),
-		userAllowOp:          make(map[uuid.UUID]map[string]struct{}),
-		userDenyOp:           make(map[uuid.UUID]map[string]struct{}),
-		uaNodeClosures:       make(map[uint32]struct{}),
-		oaNodeClosures:       make(map[uint32]struct{}),
-		usersDecisionsOnly:   make(map[uuid.UUID]struct{}),
-		objectsDecisionsOnly: make(map[uuid.UUID]struct{}),
-		oaDescClosures:       make(map[uint32]struct{}),
+		subjectsUAClosure:     make(map[uuid.UUID]struct{}),
+		objectsOAClosure:      make(map[uuid.UUID]struct{}),
+		subjectAllowOp:        make(map[uuid.UUID]map[string]struct{}),
+		subjectDenyOp:         make(map[uuid.UUID]map[string]struct{}),
+		uaNodeClosures:        make(map[uint32]struct{}),
+		oaNodeClosures:        make(map[uint32]struct{}),
+		subjectsDecisionsOnly: make(map[uuid.UUID]struct{}),
+		objectsDecisionsOnly:  make(map[uuid.UUID]struct{}),
+		oaDescClosures:        make(map[uint32]struct{}),
 	}
 }
 
-func (inv *invalidation) addAllow(user uuid.UUID, op string) {
-	if inv.userAllowOp[user] == nil {
-		inv.userAllowOp[user] = map[string]struct{}{}
+func (inv *invalidation) addAllow(subject uuid.UUID, op string) {
+	if inv.subjectAllowOp[subject] == nil {
+		inv.subjectAllowOp[subject] = map[string]struct{}{}
 	}
-	inv.userAllowOp[user][op] = struct{}{}
+	inv.subjectAllowOp[subject][op] = struct{}{}
 }
-func (inv *invalidation) addDeny(user uuid.UUID, op string) {
-	if inv.userDenyOp[user] == nil {
-		inv.userDenyOp[user] = map[string]struct{}{}
+func (inv *invalidation) addDeny(subject uuid.UUID, op string) {
+	if inv.subjectDenyOp[subject] == nil {
+		inv.subjectDenyOp[subject] = map[string]struct{}{}
 	}
-	inv.userDenyOp[user][op] = struct{}{}
+	inv.subjectDenyOp[subject][op] = struct{}{}
 }
 
 func computeInvalidations(inv *invalidation, s *Snapshot, ch postgres.PolicyChange) {
@@ -64,13 +64,13 @@ func computeInvalidations(inv *invalidation, s *Snapshot, ch postgres.PolicyChan
 			return
 		}
 
-		// user -> UA : only that user’s UA closure changes
-		if p.ChildType == postgres.NodeUser && p.ParentType == postgres.NodeUA {
-			inv.usersUAClosure[p.ChildID] = struct{}{}
+		// subject -> UA : only that subject’s UA closure changes
+		if p.ChildType == postgres.NodeSubject && p.ParentType == postgres.NodeUA {
+			inv.subjectsUAClosure[p.ChildID] = struct{}{}
 			return
 		}
 
-		// UA -> UA : all users assigned under CHILD UA subtree affected
+		// UA -> UA : all subjects assigned under CHILD UA subtree affected
 		if p.ChildType == postgres.NodeUA && p.ParentType == postgres.NodeUA {
 			childIdx, ok := s.uaIndex[p.ChildID]
 			if !ok {
@@ -81,9 +81,9 @@ func computeInvalidations(inv *invalidation, s *Snapshot, ch postgres.PolicyChan
 				inv.uaNodeClosures[ua] = struct{}{}
 			}
 
-			// plus: impacted users (you already do this)
-			for _, u := range s.UsersInUASubtree(childIdx) {
-				inv.usersUAClosure[u] = struct{}{}
+			// plus: impacted subjects (you already do this)
+			for _, u := range s.SubjectsInUASubtree(childIdx) {
+				inv.subjectsUAClosure[u] = struct{}{}
 			}
 			return
 		}
@@ -107,11 +107,11 @@ func computeInvalidations(inv *invalidation, s *Snapshot, ch postgres.PolicyChan
 			}
 
 			// invalidate UA node closures for every UA in subtree(childIdx)
-			for _, oa := range s.OASubtree(childIdx) { // implement similarly to UsersInUASubtree but returns []uint32
+			for _, oa := range s.OASubtree(childIdx) { // implement similarly to SubjectsInUASubtree but returns []uint32
 				inv.oaNodeClosures[oa] = struct{}{}
 			}
 
-			// plus: impacted users (you already do this)
+			// plus: impacted subjects (you already do this)
 			for _, o := range s.ObjectsInOASubtree(childIdx) {
 				inv.objectsOAClosure[o] = struct{}{}
 			}
@@ -124,8 +124,8 @@ func computeInvalidations(inv *invalidation, s *Snapshot, ch postgres.PolicyChan
 			if !ok {
 				return
 			}
-			for _, u := range s.UsersInUASubtree(uaIdx) {
-				inv.usersDecisionsOnly[u] = struct{}{}
+			for _, u := range s.SubjectsInUASubtree(uaIdx) {
+				inv.subjectsDecisionsOnly[u] = struct{}{}
 			}
 			return
 		}
@@ -143,27 +143,27 @@ func computeInvalidations(inv *invalidation, s *Snapshot, ch postgres.PolicyChan
 		}
 
 	case "ASSOC_OP":
-		// association changes do NOT affect closures, but affect allowCache(user,op)
+		// association changes do NOT affect closures, but affect allowCache(subject,op)
 		var p struct {
-			UserAttributeID   uuid.UUID `json:"ua_id"`
-			ObjectAttributeID uuid.UUID `json:"oa_id"`
-			Operation         string    `json:"op"`
+			SubjectAttributeID uuid.UUID `json:"ua_id"`
+			ObjectAttributeID  uuid.UUID `json:"oa_id"`
+			Operation          string    `json:"op"`
 		}
 		if json.Unmarshal(ch.Payload, &p) != nil {
 			return
 		}
 
-		uaIdx, ok := s.uaIndex[p.UserAttributeID]
+		uaIdx, ok := s.uaIndex[p.SubjectAttributeID]
 		if !ok {
 			return
 		}
 
-		for _, u := range s.UsersInUASubtree(uaIdx) {
+		for _, u := range s.SubjectsInUASubtree(uaIdx) {
 			inv.addAllow(u, p.Operation)
 		}
 
 	case "PROHIB_OP":
-		// prohibition changes do NOT affect closures, but affect denyCache(user,op)
+		// prohibition changes do NOT affect closures, but affect denyCache(subject,op)
 		var p struct {
 			SubjectType       postgres.ProhibitionSubjectType `json:"subject_type"`
 			SubjectID         uuid.UUID                       `json:"subject_id"`
@@ -174,7 +174,7 @@ func computeInvalidations(inv *invalidation, s *Snapshot, ch postgres.PolicyChan
 			return
 		}
 
-		if p.SubjectType == postgres.ProhibitUser {
+		if p.SubjectType == postgres.ProhibitSubject {
 			inv.addDeny(p.SubjectID, p.Operation)
 			return
 		}
@@ -183,7 +183,7 @@ func computeInvalidations(inv *invalidation, s *Snapshot, ch postgres.PolicyChan
 		if !ok {
 			return
 		}
-		for _, u := range s.UsersInUASubtree(uaIdx) {
+		for _, u := range s.SubjectsInUASubtree(uaIdx) {
 			inv.addDeny(u, p.Operation)
 		}
 	}

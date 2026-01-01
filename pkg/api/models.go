@@ -65,7 +65,7 @@ type Version struct {
 // ListVersionsResponse uses the generic SearchResponse
 type ListVersionsResponse = SearchResponse[Version]
 
-// --- Subjects (Users) ---
+// --- Subjects (Subjects) ---
 type Subject struct {
 	ID          uuid.UUID         `json:"id"`
 	ExternalID  string            `json:"external_id,omitempty"`
@@ -112,39 +112,24 @@ type SubjectSet struct {
 	UpdatedAt        *time.Time  `json:"updatedAt,omitempty"`
 }
 
-// SubjectGroup is an alias for SubjectSet (backward compatibility)
-type SubjectGroup = SubjectSet
-
 type CreateSubjectSetRequest struct {
 	Name string `json:"name"`
 }
 
-// CreateSubjectGroupRequest is an alias for CreateSubjectSetRequest (backward compatibility)
-type CreateSubjectGroupRequest = CreateSubjectSetRequest
-
 type UpdateSubjectSetRequest struct {
 	Name string `json:"name"`
 }
-
-// UpdateSubjectGroupRequest is an alias for UpdateSubjectSetRequest (backward compatibility)
-type UpdateSubjectGroupRequest = UpdateSubjectSetRequest
 
 type SubjectSetResponse struct {
 	Group    SubjectSet `json:"group"`
 	Revision int64      `json:"revision"`
 }
 
-// SubjectGroupResponse is an alias for SubjectSetResponse (backward compatibility)
-type SubjectGroupResponse = SubjectSetResponse
-
 type ListSubjectSetsResponse struct {
 	Groups  []SubjectSet `json:"groups"`
 	Cursor  string       `json:"cursor,omitempty"`
 	HasMore bool         `json:"has_more"`
 }
-
-// ListSubjectGroupsResponse is an alias for ListSubjectSetsResponse (backward compatibility)
-type ListSubjectGroupsResponse = ListSubjectSetsResponse
 
 // --- Objects ---
 type Object struct {
@@ -190,39 +175,24 @@ type ObjectSet struct {
 	UpdatedAt       *time.Time  `json:"updatedAt,omitempty"`
 }
 
-// ObjectGroup is an alias for ObjectSet (backward compatibility)
-type ObjectGroup = ObjectSet
-
 type CreateObjectSetRequest struct {
 	Name string `json:"name"`
 }
 
-// CreateObjectGroupRequest is an alias for CreateObjectSetRequest (backward compatibility)
-type CreateObjectGroupRequest = CreateObjectSetRequest
-
 type UpdateObjectSetRequest struct {
 	Name string `json:"name"`
 }
-
-// UpdateObjectGroupRequest is an alias for UpdateObjectSetRequest (backward compatibility)
-type UpdateObjectGroupRequest = UpdateObjectSetRequest
 
 type ObjectSetResponse struct {
 	Group    ObjectSet `json:"group"`
 	Revision int64     `json:"revision"`
 }
 
-// ObjectGroupResponse is an alias for ObjectSetResponse (backward compatibility)
-type ObjectGroupResponse = ObjectSetResponse
-
 type ListObjectSetsResponse struct {
 	Groups  []ObjectSet `json:"groups"`
 	Cursor  string      `json:"cursor,omitempty"`
 	HasMore bool        `json:"has_more"`
 }
-
-// ListObjectGroupsResponse is an alias for ListObjectSetsResponse (backward compatibility)
-type ListObjectGroupsResponse = ListObjectSetsResponse
 
 // --- Relationships (Assignment Edges) ---
 type NodeRef struct {
@@ -366,7 +336,7 @@ type ListDeniesResponse struct {
 
 // --- Authorization ---
 type AuthorizeRequest struct {
-	UserID    uuid.UUID `json:"user_id"`
+	SubjectID uuid.UUID `json:"subject_id"`
 	ObjectID  uuid.UUID `json:"object_id"`
 	Operation string    `json:"operation"`
 }

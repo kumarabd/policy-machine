@@ -17,7 +17,7 @@ This document covers the PostgreSQL database schema, indexing strategy, and quer
 Policy Machine uses PostgreSQL with GORM for ORM functionality. The schema implements the NGAC model with support for:
 
 - Multi-tenant isolation
-- Hierarchical user and object attributes
+- Hierarchical subject and object attributes
 - Policy classes for domain isolation
 - Associations for permission grants
 - Prohibitions for explicit denials
@@ -59,12 +59,12 @@ CREATE TABLE tenants (
 
 **Indexes**: `name` (unique)
 
-### 2. Users
+### 2. Subjects
 
 Subject entities requesting access.
 
 ```sql
-CREATE TABLE users (
+CREATE TABLE subjects (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id UUID NOT NULL,
     external_id VARCHAR NOT NULL,
@@ -80,7 +80,7 @@ CREATE TABLE users (
 - `tenant_id` (for tenant filtering)
 - `(tenant_id, external_id)` (unique, for external ID lookup)
 
-**Purpose**: Store user entities with external identifiers.
+**Purpose**: Store subject entities with external identifiers.
 
 ### 3. Objects
 
@@ -124,14 +124,14 @@ CREATE TABLE policy_classes (
 - `tenant_id` (for tenant filtering)
 - `(tenant_id, name)` (unique)
 
-**Purpose**: Define policy domains that users and objects must share.
+**Purpose**: Define policy domains that subjects and objects must share.
 
-### 5. User Attributes (UA)
+### 5. Subject Attributes (UA)
 
-Hierarchical user groupings (roles, teams, departments).
+Hierarchical subject groupings (roles, teams, departments).
 
 ```sql
-CREATE TABLE user_attributes (
+CREATE TABLE subject_attributes (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id UUID NOT NULL,
     name VARCHAR NOT NULL,
@@ -145,7 +145,7 @@ CREATE TABLE user_attributes (
 - `tenant_id` (for tenant filtering)
 - `(tenant_id, name)` (unique)
 
-**Purpose**: Represent roles, teams, or other user groupings.
+**Purpose**: Represent roles, teams, or other subject groupings.
 
 ### 6. Object Attributes (OA)
 
@@ -170,7 +170,7 @@ CREATE TABLE object_attributes (
 
 ### 7. Assignment Edges
 
-Graph edges connecting users/objects to attributes and attributes to policy classes.
+Graph edges connecting subjects/objects to attributes and attributes to policy classes.
 
 ```sql
 CREATE TABLE assignment_edges (
@@ -186,7 +186,7 @@ CREATE TABLE assignment_edges (
 ```
 
 **Edge Types**:
-- `USER → UA`: User assigned to user attribute
+- `USER → UA`: Subject assigned to subject attribute
 - `UA → UA`: Hierarchical UA relationships
 - `OBJECT → OA`: Object assigned to object attribute
 - `OA → OA`: Hierarchical OA relationships
@@ -208,18 +208,18 @@ Permission grants from UA to OA.
 CREATE TABLE associations (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id UUID NOT NULL,
-    user_attribute_id UUID NOT NULL,
+    subject_attribute_id UUID NOT NULL,
     object_attribute_id UUID NOT NULL,
     created_at TIMESTAMP,
-    UNIQUE (tenant_id, user_attribute_id, object_attribute_id)
+    UNIQUE (tenant_id, subject_attribute_id, object_attribute_id)
 );
 ```
 
 **Indexes**:
 - `tenant_id` (for tenant filtering)
-- `(tenant_id, user_attribute_id)` (for UA lookups)
+- `(tenant_id, subject_attribute_id)` (for UA lookups)
 - `(tenant_id, object_attribute_id)` (for OA lookups)
-- `(tenant_id, user_attribute_id, object_attribute_id)` (unique)
+- `(tenant_id, subject_attribute_id, object_attribute_id)` (unique)
 
 **Purpose**: Define which UAs can access which OAs.
 
@@ -362,8 +362,8 @@ Indexes are created automatically during database initialization (`pkg/postgres/
 
 ```go
 stmts := []string{
-    `CREATE UNIQUE INDEX IF NOT EXISTS uidx_users_tenant_external 
-     ON users (tenant_id, external_id);`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS uidx_subjects_tenant_external 
+     ON subjects (tenant_id, external_id);`,
     // ... more indexes
 }
 
@@ -382,7 +382,7 @@ Load all policy data for a tenant:
 
 ```go
 // Load UAs
-var uas []postgres.UserAttribute
+var uas []postgres.SubjectAttribute
 db.Where("tenant_id = ?", tenantID).Find(&uas)
 
 // Load assignment edges
@@ -518,9 +518,9 @@ func validateSeqContinuity(lastSeq int64, changes []postgres.PolicyChange) bool 
 All tables include `tenant_id` for isolation:
 
 ```go
-type User struct {
+type Subject struct {
     ID       uuid.UUID
-    TenantID uuid.UUID `gorm:"index:idx_users_tenant"`
+    TenantID uuid.UUID `gorm:"index:idx_subjects_tenant"`
     // ...
 }
 ```
@@ -530,7 +530,7 @@ type User struct {
 All queries filter by `tenant_id`:
 
 ```go
-db.Where("tenant_id = ?", tenantID).Find(&users)
+db.Where("tenant_id = ?", tenantID).Find(&subjects)
 ```
 
 ### Foreign Key Constraints
@@ -564,8 +564,8 @@ sqlDB.SetConnMaxLifetime(time.Duration(opts.DialTimeoutSeconds) * time.Second)
 
 Indexes are automatically maintained by PostgreSQL. Monitor:
 
-- **Index usage**: `pg_stat_user_indexes`
-- **Index bloat**: `pg_stat_user_tables`
+- **Index usage**: `pg_stat_subject_indexes`
+- **Index bloat**: `pg_stat_subject_tables`
 - **Query plans**: `EXPLAIN ANALYZE`
 
 ### Database Tuning
@@ -592,7 +592,7 @@ GORM auto-migrates schema on startup:
 ```go
 err = db.AutoMigrate(
     &Tenant{},
-    &User{},
+    &Subject{},
     &Object{},
     // ... all models
 )
@@ -649,7 +649,7 @@ SELECT * FROM pg_stat_statements
 ORDER BY total_time DESC LIMIT 10;
 
 -- Check index usage
-SELECT * FROM pg_stat_user_indexes 
+SELECT * FROM pg_stat_subject_indexes 
 WHERE idx_scan = 0;
 ```
 

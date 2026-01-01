@@ -10,9 +10,9 @@ import (
 )
 
 type decisionKey struct {
-	User   uuid.UUID
-	Object uuid.UUID
-	Op     string
+	Subject uuid.UUID
+	Object  uuid.UUID
+	Op      string
 }
 
 type decisionEntry struct {
@@ -30,10 +30,10 @@ type IndexedDecisionCache struct {
 
 	mu sync.RWMutex
 
-	entries  map[decisionKey]decisionEntry
-	byUser   map[uuid.UUID]keySet
-	byObject map[uuid.UUID]keySet
-	byUserOp map[uuid.UUID]map[string]keySet
+	entries     map[decisionKey]decisionEntry
+	bySubject   map[uuid.UUID]keySet
+	byObject    map[uuid.UUID]keySet
+	bySubjectOp map[uuid.UUID]map[string]keySet
 
 	// LRU tracking
 	ll       *list.List
@@ -49,14 +49,14 @@ func NewIndexedDecisionCache(ttl time.Duration, maxEntries int) *IndexedDecision
 		maxEntries = 500000 // Default
 	}
 	return &IndexedDecisionCache{
-		ttl:        ttl,
-		maxEntries: maxEntries,
-		entries:    make(map[decisionKey]decisionEntry),
-		byUser:     make(map[uuid.UUID]keySet),
-		byObject:   make(map[uuid.UUID]keySet),
-		byUserOp:   make(map[uuid.UUID]map[string]keySet),
-		ll:         list.New(),
-		lruIndex:   make(map[decisionKey]*list.Element),
+		ttl:         ttl,
+		maxEntries:  maxEntries,
+		entries:     make(map[decisionKey]decisionEntry),
+		bySubject:   make(map[uuid.UUID]keySet),
+		byObject:    make(map[uuid.UUID]keySet),
+		bySubjectOp: make(map[uuid.UUID]map[string]keySet),
+		ll:          list.New(),
+		lruIndex:    make(map[decisionKey]*list.Element),
 	}
 }
 
@@ -67,8 +67,8 @@ func (c *IndexedDecisionCache) Len() int {
 	return len(c.entries)
 }
 
-func (c *IndexedDecisionCache) Get(user, object uuid.UUID, op string, curRevision int64) (bool, bool) {
-	k := decisionKey{User: user, Object: object, Op: op}
+func (c *IndexedDecisionCache) Get(subject, object uuid.UUID, op string, curRevision int64) (bool, bool) {
+	k := decisionKey{Subject: subject, Object: object, Op: op}
 	now := time.Now()
 
 	c.mu.Lock()
@@ -98,8 +98,8 @@ func (c *IndexedDecisionCache) Get(user, object uuid.UUID, op string, curRevisio
 	return e.Allowed, true
 }
 
-func (c *IndexedDecisionCache) Put(user, object uuid.UUID, op string, allowed bool, curRevision int64) {
-	k := decisionKey{User: user, Object: object, Op: op}
+func (c *IndexedDecisionCache) Put(subject, object uuid.UUID, op string, allowed bool, curRevision int64) {
+	k := decisionKey{Subject: subject, Object: object, Op: op}
 	e := decisionEntry{
 		Allowed:  allowed,
 		Expires:  time.Now().Add(c.ttl),
@@ -139,11 +139,11 @@ func (c *IndexedDecisionCache) Put(user, object uuid.UUID, op string, allowed bo
 	// Add to entries
 	c.entries[k] = e
 
-	// index: byUser
-	if c.byUser[user] == nil {
-		c.byUser[user] = make(keySet)
+	// index: bySubject
+	if c.bySubject[subject] == nil {
+		c.bySubject[subject] = make(keySet)
 	}
-	c.byUser[user][k] = struct{}{}
+	c.bySubject[subject][k] = struct{}{}
 
 	// index: byObject
 	if c.byObject[object] == nil {
@@ -151,35 +151,35 @@ func (c *IndexedDecisionCache) Put(user, object uuid.UUID, op string, allowed bo
 	}
 	c.byObject[object][k] = struct{}{}
 
-	// index: byUserOp
-	if c.byUserOp[user] == nil {
-		c.byUserOp[user] = make(map[string]keySet)
+	// index: bySubjectOp
+	if c.bySubjectOp[subject] == nil {
+		c.bySubjectOp[subject] = make(map[string]keySet)
 	}
-	if c.byUserOp[user][op] == nil {
-		c.byUserOp[user][op] = make(keySet)
+	if c.bySubjectOp[subject][op] == nil {
+		c.bySubjectOp[subject][op] = make(keySet)
 	}
-	c.byUserOp[user][op][k] = struct{}{}
+	c.bySubjectOp[subject][op][k] = struct{}{}
 }
 
-func (c *IndexedDecisionCache) Delete(user, object uuid.UUID, op string) {
-	k := decisionKey{User: user, Object: object, Op: op}
+func (c *IndexedDecisionCache) Delete(subject, object uuid.UUID, op string) {
+	k := decisionKey{Subject: subject, Object: object, Op: op}
 	c.mu.Lock()
 	c.deleteKeyLocked(k)
 	c.mu.Unlock()
 }
 
-func (c *IndexedDecisionCache) DeleteUser(user uuid.UUID) {
+func (c *IndexedDecisionCache) DeleteSubject(subject uuid.UUID) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	keys := c.byUser[user]
+	keys := c.bySubject[subject]
 	if keys == nil {
 		return
 	}
 	for k := range keys {
 		c.deleteKeyLocked(k)
 	}
-	// deleteKeyLocked will also remove c.byUser[user] when empty
+	// deleteKeyLocked will also remove c.bySubject[subject] when empty
 }
 
 func (c *IndexedDecisionCache) DeleteObject(object uuid.UUID) {
@@ -196,11 +196,11 @@ func (c *IndexedDecisionCache) DeleteObject(object uuid.UUID) {
 	// deleteKeyLocked will also remove c.byObject[object] when empty
 }
 
-func (c *IndexedDecisionCache) DeleteUserOp(user uuid.UUID, op string) {
+func (c *IndexedDecisionCache) DeleteSubjectOp(subject uuid.UUID, op string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	ops := c.byUserOp[user]
+	ops := c.bySubjectOp[subject]
 	if ops == nil {
 		return
 	}
@@ -219,9 +219,9 @@ func (c *IndexedDecisionCache) Clear() {
 	defer c.mu.Unlock()
 
 	c.entries = make(map[decisionKey]decisionEntry)
-	c.byUser = make(map[uuid.UUID]keySet)
+	c.bySubject = make(map[uuid.UUID]keySet)
 	c.byObject = make(map[uuid.UUID]keySet)
-	c.byUserOp = make(map[uuid.UUID]map[string]keySet)
+	c.bySubjectOp = make(map[uuid.UUID]map[string]keySet)
 	c.ll = list.New()
 	c.lruIndex = make(map[decisionKey]*list.Element)
 }
@@ -263,11 +263,11 @@ func (c *IndexedDecisionCache) deleteKeyLocked(k decisionKey) {
 		delete(c.lruIndex, k)
 	}
 
-	// byUser cleanup
-	if set := c.byUser[k.User]; set != nil {
+	// bySubject cleanup
+	if set := c.bySubject[k.Subject]; set != nil {
 		delete(set, k)
 		if len(set) == 0 {
-			delete(c.byUser, k.User)
+			delete(c.bySubject, k.Subject)
 		}
 	}
 
@@ -279,8 +279,8 @@ func (c *IndexedDecisionCache) deleteKeyLocked(k decisionKey) {
 		}
 	}
 
-	// byUserOp cleanup
-	if ops := c.byUserOp[k.User]; ops != nil {
+	// bySubjectOp cleanup
+	if ops := c.bySubjectOp[k.Subject]; ops != nil {
 		if set := ops[k.Op]; set != nil {
 			delete(set, k)
 			if len(set) == 0 {
@@ -288,7 +288,7 @@ func (c *IndexedDecisionCache) deleteKeyLocked(k decisionKey) {
 			}
 		}
 		if len(ops) == 0 {
-			delete(c.byUserOp, k.User)
+			delete(c.bySubjectOp, k.Subject)
 		}
 	}
 }
@@ -302,4 +302,3 @@ func (c *IndexedDecisionCache) Evictions() uint64 {
 func (c *IndexedDecisionCache) ExpiredDeletes() uint64 {
 	return c.expiredDeletes.Load()
 }
-

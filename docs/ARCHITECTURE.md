@@ -40,7 +40,7 @@ Policy Machine is a production-grade authorization engine implementing the Next 
 │                                                           │
 │  ┌────────────────────────────────────────────────────┐  │
 │  │         Multi-Tier Caching System                 │  │
-│  │  • UA/OA Closure Cache  • User-Op Bitmap Cache    │  │
+│  │  • UA/OA Closure Cache  • Subject-Op Bitmap Cache    │  │
 │  │  • Node Closure Cache   • Decision Cache          │  │
 │  └────────────────────────────────────────────────────┘  │
 └──────────────────────┬──────────────────────────────────────┘
@@ -70,7 +70,7 @@ The engine is the heart of the authorization system, responsible for:
 - `snapshot.go`: Immutable policy graph representation
 - `load.go`: Snapshot loading from database
 - `refresh.go`: Incremental snapshot updates
-- `closures.go`: User/Object attribute closure computation
+- `closures.go`: Subject/Object attribute closure computation
 - `node_closure.go`: Node-level graph traversals
 
 ### 2. Database Layer (`pkg/postgres/`)
@@ -128,10 +128,10 @@ Observability and monitoring:
 ```
 1. HTTP Request
    └─> POST /api/v1/authorize
-       { user_id, object_id, operation }
+       { subject_id, object_id, operation }
 
 2. Server Handler
-   └─> engine.Decide(ctx, userID, objectID, op)
+   └─> engine.Decide(ctx, subjectID, objectID, op)
 
 3. Decision Cache Lookup
    └─> Check indexedDecisionCache
@@ -144,7 +144,7 @@ Observability and monitoring:
        └─> Valid: Use current snapshot
 
 5. Closure Computation
-   ├─> userUAClosure(userID)
+   ├─> subjectUAClosure(subjectID)
    │   └─> Check uaCache
    │       ├─> HIT: Return cached closure
    │       └─> MISS: Compute via graph traversal
@@ -157,17 +157,17 @@ Observability and monitoring:
                └─> Cache result (TTL: 2min)
 
 6. Policy Class Check
-   └─> Compute userPCs ∩ objPCs
+   └─> Compute subjectPCs ∩ objPCs
        └─> Empty? Return DENY (no shared policy class)
 
 7. Allow/Deny Computation
-   ├─> allowedFor(user, op, uaClosure)
+   ├─> allowedFor(subject, op, uaClosure)
    │   └─> Check allowCache
    │       ├─> HIT: Return cached bitmap
    │       └─> MISS: Aggregate associations
    │           └─> Cache result (TTL: 2min)
    │
-   └─> deniedFor(user, op, uaClosure)
+   └─> deniedFor(subject, op, uaClosure)
        └─> Check denyCache
            ├─> HIT: Return cached bitmap
            └─> MISS: Aggregate prohibitions
@@ -178,7 +178,7 @@ Observability and monitoring:
        └─> !effective.IsEmpty() ? ALLOW : DENY
 
 9. Cache Decision
-   └─> decisions.Put(userID, objectID, op, allowed, revision)
+   └─> decisions.Put(subjectID, objectID, op, allowed, revision)
        └─> TTL: 60 seconds
 
 10. Response
@@ -203,7 +203,7 @@ Observability and monitoring:
 4. Invalidation Computation
    └─> For each change:
        └─> computeInvalidations(inv, snapshot, change)
-           └─> Track affected users, objects, operations
+           └─> Track affected subjects, objects, operations
 
 5. Copy-on-Write Snapshot Update
    └─> cloneSnapshotShallow(snapshot)
@@ -223,7 +223,7 @@ Observability and monitoring:
            └─> Decisions
 
 8. Warmup (Optional)
-   └─> Pre-compute closures for affected users/objects
+   └─> Pre-compute closures for affected subjects/objects
        └─> Runs asynchronously
 ```
 
@@ -231,8 +231,8 @@ Observability and monitoring:
 
 ### Entity Types
 
-1. **Users (U)**: Subject entities requesting access
-   - Stored in `users` table
+1. **Subjects (U)**: Subject entities requesting access
+   - Stored in `subjects` table
    - Identified by UUID
    - Multi-tenant isolation
 
@@ -241,10 +241,10 @@ Observability and monitoring:
    - Identified by UUID
    - Can have type metadata
 
-3. **User Attributes (UA)**: Hierarchical user groupings
+3. **Subject Attributes (UA)**: Hierarchical subject groupings
    - Roles, teams, departments
    - Form a DAG (Directed Acyclic Graph)
-   - Stored in `user_attributes` table
+   - Stored in `subject_attributes` table
 
 4. **Object Attributes (OA)**: Hierarchical resource groupings
    - Folders, projects, categories
@@ -253,13 +253,13 @@ Observability and monitoring:
 
 5. **Policy Classes (PC)**: Isolated policy domains
    - Independent rule sets
-   - Users and objects must share at least one PC
+   - Subjects and objects must share at least one PC
    - Stored in `policy_classes` table
 
 ### Graph Structure
 
 ```
-Users ──┐
+Subjects ──┐
         ├──> UA ──> UA ──> UA ──┐
         │                        ├──> PC
 Objects ──┐                      │
@@ -272,7 +272,7 @@ Objects ──┐                      │
 
 The system supports typed assignment edges:
 
-- `USER → UA`: User assigned to user attribute
+- `USER → UA`: Subject assigned to subject attribute
 - `UA → UA`: Hierarchical UA relationships
 - `OBJECT → OA`: Object assigned to object attribute
 - `OA → OA`: Hierarchical OA relationships
@@ -289,7 +289,7 @@ Associations grant permissions:
 ### Prohibitions
 
 Prohibitions explicitly deny access:
-- Can target users or UAs
+- Can target subjects or UAs
 - Format: `Subject → [operation] → OA`
 - Stored in `prohibitions` and `prohibition_operations` tables
 

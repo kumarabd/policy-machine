@@ -12,9 +12,9 @@ type MockData struct {
 	TenantID      string
 	Revision      int64
 	Subjects      []api.Subject
-	SubjectGroups []api.SubjectSet
+	SubjectSets   []api.SubjectSet
 	Objects       []api.Object
-	ObjectGroups  []api.ObjectSet
+	ObjectSets    []api.ObjectSet
 	Relationships []api.Relationship
 	Rules         []api.Rule
 	Denies        []api.Deny
@@ -36,7 +36,7 @@ var (
 				Email:       "alice.johnson@acme.com",
 				Display:     "Alice Johnson",
 				DisplayName: "Alice Johnson",
-				Kind:        "user",
+				Kind:        "subject",
 				Attributes: map[string]string{
 					"department": "Engineering",
 					"role":       "Senior Software Engineer",
@@ -52,7 +52,7 @@ var (
 				Email:       "bob.smith@acme.com",
 				Display:     "Bob Smith",
 				DisplayName: "Bob Smith",
-				Kind:        "user",
+				Kind:        "subject",
 				Attributes: map[string]string{
 					"department": "Engineering",
 					"role":       "Frontend Developer",
@@ -68,7 +68,7 @@ var (
 				Email:       "carol.williams@acme.com",
 				Display:     "Carol Williams",
 				DisplayName: "Carol Williams",
-				Kind:        "user",
+				Kind:        "subject",
 				Attributes: map[string]string{
 					"department": "Engineering",
 					"role":       "Engineering Manager",
@@ -84,7 +84,7 @@ var (
 				Email:       "david.brown@acme.com",
 				Display:     "David Brown",
 				DisplayName: "David Brown",
-				Kind:        "user",
+				Kind:        "subject",
 				Attributes: map[string]string{
 					"department": "Operations",
 					"role":       "DevOps Engineer",
@@ -100,7 +100,7 @@ var (
 				Email:       "eve.davis@acme.com",
 				Display:     "Eve Davis",
 				DisplayName: "Eve Davis",
-				Kind:        "user",
+				Kind:        "subject",
 				Attributes: map[string]string{
 					"department": "Security",
 					"role":       "Security Engineer",
@@ -116,7 +116,7 @@ var (
 				Email:       "frank.miller@acme.com",
 				Display:     "Frank Miller",
 				DisplayName: "Frank Miller",
-				Kind:        "user",
+				Kind:        "subject",
 				Attributes: map[string]string{
 					"department": "Engineering",
 					"role":       "Director of Engineering",
@@ -131,7 +131,7 @@ var (
 				Email:       "grace.lee@acme.com",
 				Display:     "Grace Lee",
 				DisplayName: "Grace Lee",
-				Kind:        "user",
+				Kind:        "subject",
 				Attributes: map[string]string{
 					"department": "Operations",
 					"role":       "Operations Manager",
@@ -147,7 +147,7 @@ var (
 				Email:       "henry.wilson@acme.com",
 				Display:     "Henry Wilson",
 				DisplayName: "Henry Wilson",
-				Kind:        "user",
+				Kind:        "subject",
 				Attributes: map[string]string{
 					"department": "Security",
 					"role":       "Security Manager",
@@ -163,7 +163,7 @@ var (
 				Email:       "iris.martinez@acme.com",
 				Display:     "Iris Martinez",
 				DisplayName: "Iris Martinez",
-				Kind:        "user",
+				Kind:        "subject",
 				Attributes: map[string]string{
 					"department": "Engineering",
 					"role":       "Software Engineer",
@@ -179,7 +179,7 @@ var (
 				Email:       "jack.thompson@acme.com",
 				Display:     "Jack Thompson",
 				DisplayName: "Jack Thompson",
-				Kind:        "user",
+				Kind:        "subject",
 				Attributes: map[string]string{
 					"department": "Engineering",
 					"role":       "QA Engineer",
@@ -195,7 +195,7 @@ var (
 				Email:       "karen.anderson@acme.com",
 				Display:     "Karen Anderson",
 				DisplayName: "Karen Anderson",
-				Kind:        "user",
+				Kind:        "subject",
 				Attributes: map[string]string{
 					"department": "Product",
 					"role":       "Product Manager",
@@ -210,7 +210,7 @@ var (
 				Email:       "lisa.chen@acme.com",
 				Display:     "Lisa Chen",
 				DisplayName: "Lisa Chen",
-				Kind:        "user",
+				Kind:        "subject",
 				Attributes: map[string]string{
 					"department": "Engineering",
 					"role":       "Data Engineer",
@@ -226,7 +226,7 @@ var (
 				Email:       "mike.rodriguez@acme.com",
 				Display:     "Mike Rodriguez",
 				DisplayName: "Mike Rodriguez",
-				Kind:        "user",
+				Kind:        "subject",
 				Attributes: map[string]string{
 					"department": "Operations",
 					"role":       "Site Reliability Engineer",
@@ -242,7 +242,7 @@ var (
 				Email:       "nina.patel@acme.com",
 				Display:     "Nina Patel",
 				DisplayName: "Nina Patel",
-				Kind:        "user",
+				Kind:        "subject",
 				Attributes: map[string]string{
 					"department": "Security",
 					"role":       "Security Analyst",
@@ -258,7 +258,7 @@ var (
 				Email:       "oscar.kim@acme.com",
 				Display:     "Oscar Kim",
 				DisplayName: "Oscar Kim",
-				Kind:        "user",
+				Kind:        "subject",
 				Attributes: map[string]string{
 					"department": "Engineering",
 					"role":       "Mobile Developer",
@@ -269,7 +269,7 @@ var (
 				CreatedAt: time.Now().Add(-45 * 24 * time.Hour),
 			},
 		},
-		SubjectGroups: []api.SubjectSet{
+		SubjectSets: []api.SubjectSet{
 			{
 				ID:          uuid.MustParse("20000000-0000-0000-0000-000000000001"),
 				Name:        "Engineering Team",
@@ -441,17 +441,17 @@ var (
 			},
 			{
 				ID:          uuid.MustParse("30000000-0000-0000-0000-000000000006"),
-				ExternalID:  "api/user-management-v2",
+				ExternalID:  "api/subject-management-v2",
 				Type:        "api",
-				DisplayName: "User Management API v2",
+				DisplayName: "Subject Management API v2",
 				Kind:        "api",
 				Attributes: map[string]string{
 					"version":   "v2",
 					"protocol":  "REST",
 					"status":    "active",
-					"base_path": "/api/v2/users",
+					"base_path": "/api/v2/subjects",
 				},
-				Tags:      []string{"api", "rest", "user-management", "public"},
+				Tags:      []string{"api", "rest", "subject-management", "public"},
 				CreatedAt: time.Now().Add(-180 * 24 * time.Hour),
 			},
 			{
@@ -672,7 +672,7 @@ var (
 				CreatedAt: time.Now().Add(-60 * 24 * time.Hour),
 			},
 		},
-		ObjectGroups: []api.ObjectSet{
+		ObjectSets: []api.ObjectSet{
 			{
 				ID:          uuid.MustParse("40000000-0000-0000-0000-000000000001"),
 				Name:        "Public Documents",
@@ -870,7 +870,7 @@ var (
 						ID:   uuid.MustParse("40000000-0000-0000-0000-000000000001"),
 					},
 				},
-				Description: "User3 cannot delete public documents",
+				Description: "Subject3 cannot delete public documents",
 				CreatedAt:   time.Now().Add(-15 * 24 * time.Hour),
 			},
 		},
@@ -880,7 +880,7 @@ var (
 				Revision:  1,
 				Kind:      "USER_CREATE",
 				Op:        "ADD",
-				Payload:   map[string]interface{}{"user_id": "10000000-0000-0000-0000-000000000001", "external_id": "user1"},
+				Payload:   map[string]interface{}{"subject_id": "10000000-0000-0000-0000-000000000001", "external_id": "subject1"},
 				CreatedAt: time.Now().Add(-30 * 24 * time.Hour),
 			},
 			{
@@ -922,9 +922,9 @@ func ResetMockData() {
 		TenantID:      DefaultTenantID,
 		Revision:      42,
 		Subjects:      make([]api.Subject, 0),
-		SubjectGroups: make([]api.SubjectSet, 0),
+		SubjectSets:   make([]api.SubjectSet, 0),
 		Objects:       make([]api.Object, 0),
-		ObjectGroups:  make([]api.ObjectSet, 0),
+		ObjectSets:    make([]api.ObjectSet, 0),
 		Relationships: make([]api.Relationship, 0),
 		Rules:         make([]api.Rule, 0),
 		Denies:        make([]api.Deny, 0),

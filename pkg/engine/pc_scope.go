@@ -5,12 +5,12 @@ import (
 )
 
 func commonPCs(s *Snapshot, uaClosure, oaClosure *roaring.Bitmap) *roaring.Bitmap {
-	userPCs := roaring.New()
+	subjectPCs := roaring.New()
 	it := uaClosure.Iterator()
 	for it.HasNext() {
 		ua := it.Next()
 		if b := s.uaToPCs[ua]; b != nil {
-			userPCs.Or(b)
+			subjectPCs.Or(b)
 		}
 	}
 
@@ -23,6 +23,6 @@ func commonPCs(s *Snapshot, uaClosure, oaClosure *roaring.Bitmap) *roaring.Bitma
 		}
 	}
 
-	userPCs.And(objPCs)
-	return userPCs // intersection
+	subjectPCs.And(objPCs)
+	return subjectPCs // intersection
 }

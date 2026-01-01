@@ -62,8 +62,13 @@ type PolicyClass struct {
 	Tenant Tenant `gorm:"constraint:OnUpdate:CASCADE,OnDelete:CASCADE;"`
 }
 
-// NGAC: User Attribute (UA) and Object Attribute (OA)
-type UserAttribute struct {
+// NGAC: Subject Attribute (UA) and Object Attribute (OA)
+// Subject attributes = Subject sets (same thing)
+// Object attributes = Object sets (same thing)
+// These can represent:
+// - Sets: containers for actual subjects/objects (User, ServiceAccount, Group, or Pod, Deployment, etc.)
+// - Attributes: metadata-based groupings (namespace, labels, apigroup, version, etc.)
+type SubjectAttribute struct {
 	ID       uuid.UUID `gorm:"type:uuid;default:gen_random_uuid();primaryKey"`
 	TenantID string    `gorm:"type:text;not null;index:idx_ua_tenant"`
 	Name     string    `gorm:"not null;index:uidx_ua_tenant_name,unique"`
@@ -73,6 +78,14 @@ type UserAttribute struct {
 
 	Tenant Tenant `gorm:"constraint:OnUpdate:CASCADE,OnDelete:CASCADE;"`
 }
+
+// TableName specifies the table name for GORM
+func (SubjectAttribute) TableName() string {
+	return "subject_attributes"
+}
+
+// SubjectSet is an alias for SubjectAttribute (same thing)
+type SubjectSet = SubjectAttribute
 
 type ObjectAttribute struct {
 	ID       uuid.UUID `gorm:"type:uuid;default:gen_random_uuid();primaryKey"`
@@ -85,12 +98,19 @@ type ObjectAttribute struct {
 	Tenant Tenant `gorm:"constraint:OnUpdate:CASCADE,OnDelete:CASCADE;"`
 }
 
+// ObjectSet is an alias for ObjectAttribute (same thing)
+type ObjectSet = ObjectAttribute
+
 // --- Assignments ---
 // NGAC-style assignments form DAGs:
-// - user -> UA
-// - UA -> UA
-// - object -> OA
-// - OA -> OA
+// - subject -> SubjectSet (USER -> SUBJECT_SET)
+// - subject -> UA (USER -> UA) for metadata-based grouping
+// - SubjectSet -> UA (SUBJECT_SET -> UA) to assign set to attribute
+// - UA -> UA (hierarchical attributes)
+// - object -> ObjectSet (OBJECT -> OBJECT_SET)
+// - object -> OA (OBJECT -> OA) for metadata-based grouping
+// - ObjectSet -> OA (OBJECT_SET -> OA) to assign set to attribute
+// - OA -> OA (hierarchical attributes)
 // - UA -> PolicyClass
 // - OA -> PolicyClass
 //
@@ -99,7 +119,7 @@ type ObjectAttribute struct {
 type NodeType string
 
 const (
-	NodeUser        NodeType = "USER"
+	NodeSubject     NodeType = "USER"
 	NodeUA          NodeType = "UA"
 	NodeObject      NodeType = "OBJECT"
 	NodeOA          NodeType = "OA"
@@ -147,12 +167,12 @@ type Association struct {
 	ID       uuid.UUID `gorm:"type:uuid;default:gen_random_uuid();primaryKey"`
 	TenantID string    `gorm:"type:text;not null;index:idx_assoc_tenant"`
 
-	UserAttributeID   uuid.UUID `gorm:"type:uuid;not null;index:idx_assoc_ua"`
-	ObjectAttributeID uuid.UUID `gorm:"type:uuid;not null;index:idx_assoc_oa"`
+	SubjectAttributeID uuid.UUID `gorm:"type:uuid;not null;index:idx_assoc_ua"`
+	ObjectAttributeID  uuid.UUID `gorm:"type:uuid;not null;index:idx_assoc_oa"`
 
 	CreatedAt time.Time
 
-	// Unique per (tenant, ua, oa)
+	// Unique per (tenant, subject_attribute, object_attribute)
 	// (multiple ops hang off the same association)
 	// Use tags on fields with same index name.
 }
@@ -177,8 +197,8 @@ type AssociationOperation struct {
 type ProhibitionSubjectType string
 
 const (
-	ProhibitUser ProhibitionSubjectType = "USER"
-	ProhibitUA   ProhibitionSubjectType = "UA"
+	ProhibitSubject ProhibitionSubjectType = "USER"
+	ProhibitUA      ProhibitionSubjectType = "UA"
 )
 
 type Prohibition struct {

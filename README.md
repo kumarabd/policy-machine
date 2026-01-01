@@ -61,7 +61,7 @@ engine:
 
 postgres:
   endpoint:
-    username: policy
+    subjectname: policy
     password: password123
     host: localhost
     port: 5432
@@ -92,20 +92,20 @@ The service will start on `http://localhost:8500` with:
 
 Policy Machine implements the NGAC graph-based access control model with the following entities:
 
-- **Users (U)**: Subject entities requesting access
+- **Subjects (U)**: Subject entities requesting access
 - **Objects (O)**: Protected resources
-- **User Attributes (UA)**: Hierarchical user groupings (roles, teams, departments)
+- **Subject Attributes (UA)**: Hierarchical subject groupings (roles, teams, departments)
 - **Object Attributes (OA)**: Hierarchical resource groupings (folders, projects, categories)
 - **Policy Classes (PC)**: Isolated policy domains with independent rules
 - **Associations**: Grant permissions from UA → OA for specific operations
-- **Prohibitions**: Explicit denials at user or UA level
+- **Prohibitions**: Explicit denials at subject or UA level
 
 ### Decision Algorithm
 
 Authorization decisions follow this flow:
 
 1. **Closure Computation**: Build UA and OA transitive closures via bitmap traversals
-2. **Policy Class Check**: Verify user and object share at least one policy class
+2. **Policy Class Check**: Verify subject and object share at least one policy class
 3. **Allow Calculation**: Aggregate all associations granting access
 4. **Deny Calculation**: Aggregate all prohibitions blocking access
 5. **Final Decision**: `(allow - deny) ∩ object_closure ≠ ∅`
@@ -124,7 +124,7 @@ Authorization decisions follow this flow:
 ```bash
 POST /api/v1/authorize
 {
-  "user_id": "550e8400-e29b-41d4-a716-446655440000",
+  "subject_id": "550e8400-e29b-41d4-a716-446655440000",
   "object_id": "660e8400-e29b-41d4-a716-446655440001",
   "operation": "read"
 }
@@ -141,7 +141,7 @@ Response:
 The engine provides CRUD operations for all NGAC entities through RESTful APIs (implementation in progress):
 
 - `/api/v1/ngac/policy-classes` - Policy class management
-- `/api/v1/ngac/user-attributes` - User attribute hierarchy
+- `/api/v1/ngac/subject-attributes` - Subject attribute hierarchy
 - `/api/v1/ngac/object-attributes` - Object attribute hierarchy
 - `/api/v1/ngac/assignments` - Graph edge management
 - `/api/v1/ngac/associations` - Permission grants
@@ -170,7 +170,7 @@ policy-machine/
 │   │   ├── closures.go      # UA/OA closure computation
 │   │   ├── node_closure.go  # Node-level graph traversals
 │   │   ├── closure_cache.go # TTL-based closure caching
-│   │   ├── userop_cache.go  # User-operation bitmap cache
+│   │   ├── subjectop_cache.go  # Subject-operation bitmap cache
 │   │   ├── decision_cache.go # Indexed decision cache
 │   │   └── emitter.go       # Obligation/event emission
 │   ├── postgres/            # Database layer
@@ -234,10 +234,10 @@ make generate_docs
 The engine uses the following PostgreSQL tables:
 
 - `tenants` - Multi-tenant isolation
-- `users`, `objects` - Subject and resource entities
-- `user_attributes`, `object_attributes` - Hierarchical attribute nodes
+- `subjects`, `objects` - Subject and resource entities
+- `subject_attributes`, `object_attributes` - Hierarchical attribute nodes
 - `policy_classes` - Policy domain boundaries
-- `assignment_edges` - Graph edges (typed: user→UA, UA→UA, object→OA, OA→OA, UA→PC, OA→PC)
+- `assignment_edges` - Graph edges (typed: subject→UA, UA→UA, object→OA, OA→OA, UA→PC, OA→PC)
 - `associations`, `association_operations` - Permission grants
 - `prohibitions`, `prohibition_operations` - Explicit denials
 - `policy_revisions` - Global version counter per tenant
@@ -262,9 +262,9 @@ go tool cover -html=coverage.out
 
 The engine uses tiered caching with configurable TTLs (set in `engine.go:New()`):
 
-- **User/Object closures**: 2 minutes
+- **Subject/Object closures**: 2 minutes
 - **Node closures (UA/OA)**: 10 minutes  
-- **User-operation bitmaps**: 2 minutes
+- **Subject-operation bitmaps**: 2 minutes
 - **Final decisions**: 60 seconds
 
 Adjust these based on your policy change frequency vs. cache hit rate tradeoffs.
@@ -279,7 +279,7 @@ CREATE INDEX idx_asg_child_lookup ON assignment_edges (tenant_id, child_type, ch
 CREATE INDEX idx_asg_parent_lookup ON assignment_edges (tenant_id, parent_type, parent_id);
 
 -- Association lookups
-CREATE INDEX idx_assoc_ua_lookup ON associations (tenant_id, user_attribute_id);
+CREATE INDEX idx_assoc_ua_lookup ON associations (tenant_id, subject_attribute_id);
 CREATE INDEX idx_assoc_oa_lookup ON associations (tenant_id, object_attribute_id);
 
 -- Change log queries
@@ -371,7 +371,7 @@ Contributions are welcome! Please:
 Please ensure:
 - Code follows Go conventions and passes `golangci-lint`
 - Tests are included for new functionality
-- Documentation is updated for user-facing changes
+- Documentation is updated for subject-facing changes
 
 ## License
 

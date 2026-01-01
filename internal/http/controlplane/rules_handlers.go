@@ -8,9 +8,9 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
-	"github.com/kumarabd/policy-machine/pkg/api"
-	"github.com/kumarabd/policy-machine/internal/mock"
 	httputil "github.com/kumarabd/policy-machine/internal/http"
+	"github.com/kumarabd/policy-machine/internal/mock"
+	"github.com/kumarabd/policy-machine/pkg/api"
 	"gorm.io/gorm"
 )
 
@@ -201,7 +201,7 @@ func (s *Server) GetRule(w http.ResponseWriter, r *http.Request) {
 		Actions:     ops,
 		SubjectSelector: api.NodeRef{
 			Type: "subject-set",
-			ID:   assoc.UserAttributeID,
+			ID:   assoc.SubjectAttributeID,
 		},
 		ObjectSelector: api.NodeRef{
 			Type: "object-set",
@@ -270,7 +270,7 @@ func (s *Server) UpdateRule(w http.ResponseWriter, r *http.Request) {
 			Actions:     ops,
 			SubjectSelector: api.NodeRef{
 				Type: "subject-set",
-				ID:   assoc.UserAttributeID,
+				ID:   assoc.SubjectAttributeID,
 			},
 			ObjectSelector: api.NodeRef{
 				Type: "object-set",

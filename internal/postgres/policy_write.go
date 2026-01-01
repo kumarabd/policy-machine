@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/kumarabd/policy-machine/internal/validate"
@@ -74,13 +75,14 @@ func (h *Handler) CreateSubject(ctx context.Context, tenantID string, subject *S
 }
 
 // CreateSubjectSet creates a subject attribute (subject set) and records the change
+// Subject attributes = Subject sets (same thing)
 // It is idempotent: if a subject attribute with the same tenant_id and name exists, it returns the existing one
-func (h *Handler) CreateSubjectSet(ctx context.Context, tenantID string, ua *UserAttribute) (int64, error) {
+func (h *Handler) CreateSubjectSet(ctx context.Context, tenantID string, ua *SubjectAttribute) (int64, error) {
 	return h.WithPolicyWriteTx(ctx, tenantID, func(tx *gorm.DB) error {
 		ua.TenantID = tenantID
 
 		// Check if subject attribute already exists (idempotent)
-		var existing UserAttribute
+		var existing SubjectAttribute
 		err := tx.Where("tenant_id = ? AND name = ?", tenantID, ua.Name).First(&existing).Error
 		if err == nil {
 			// Subject attribute already exists, use it
@@ -140,6 +142,7 @@ func (h *Handler) CreateObject(ctx context.Context, tenantID string, obj *Object
 }
 
 // CreateObjectSet creates an object attribute (object set) and records the change
+// Object attributes = Object sets (same thing)
 // It is idempotent: if an object attribute with the same tenant_id and name exists, it returns the existing one
 func (h *Handler) CreateObjectSet(ctx context.Context, tenantID string, oa *ObjectAttribute) (int64, error) {
 	return h.WithPolicyWriteTx(ctx, tenantID, func(tx *gorm.DB) error {
@@ -177,35 +180,36 @@ func (h *Handler) CreateRelationship(ctx context.Context, tenantID string, edge 
 	return h.WithPolicyWriteTx(ctx, tenantID, func(tx *gorm.DB) error {
 		edge.TenantID = tenantID
 
-		// Validate
+		// Validate - this already checks for duplicates and returns nil if exists (idempotent)
 		if err := validate.ValidateAssignmentEdgeCreate(ctx, tx, tenantID, edge); err != nil {
 			return err
 		}
 
-		// Check if exists
-		var count int64
+		// Check if edge already exists (validation returns nil if exists, but we need to check explicitly)
+		var existing AssignmentEdge
 		err := tx.WithContext(ctx).
-			Table("assignment_edges").
 			Where("tenant_id = ? AND child_type = ? AND child_id = ? AND parent_type = ? AND parent_id = ?",
 				tenantID, edge.ChildType, edge.ChildID, edge.ParentType, edge.ParentID).
-			Count(&count).Error
-		if err != nil {
-			return err
+			First(&existing).Error
+		if err == nil {
+			return nil // Already exists - idempotent
 		}
-		if count > 0 {
-			// Already exists - idempotent
-			return nil
-		}
-
-		// Create using raw SQL with PostgreSQL placeholders to avoid GORM index issues
-		insertSQL := `INSERT INTO assignment_edges (id, tenant_id, child_type, child_id, parent_type, parent_id, created_at)
-			VALUES ($1, $2, $3, $4, $5, $6, $7)`
-		if err := tx.WithContext(ctx).Exec(insertSQL,
-			edge.ID, edge.TenantID, string(edge.ChildType), edge.ChildID, string(edge.ParentType), edge.ParentID, edge.CreatedAt).Error; err != nil {
+		if err != gorm.ErrRecordNotFound {
 			return err
 		}
 
-		// Change will be logged by BumpRevision in WithPolicyWriteTx
+		// Create the edge
+		if err := tx.Create(edge).Error; err != nil {
+			// Handle duplicate key errors (idempotent)
+			errMsg := err.Error()
+			if strings.Contains(errMsg, "23505") || strings.Contains(errMsg, "duplicate key") ||
+				strings.Contains(errMsg, "unique constraint") || strings.Contains(errMsg, "uidx_asg_edge") {
+				return nil // Already exists - idempotent
+			}
+			return err
+		}
+
+		// Record change
 		rev, _ := BumpRevision(tx, tenantID)
 		payload := map[string]any{
 			"child_type":  edge.ChildType,
@@ -247,11 +251,11 @@ func (h *Handler) CreateRule(ctx context.Context, tenantID string, uaID, oaID uu
 	var assocID uuid.UUID
 	revision, err := h.WithPolicyWriteTx(ctx, tenantID, func(tx *gorm.DB) error {
 		assoc := Association{
-			TenantID:          tenantID,
-			UserAttributeID:   uaID,
-			ObjectAttributeID: oaID,
+			TenantID:           tenantID,
+			SubjectAttributeID: uaID,
+			ObjectAttributeID:  oaID,
 		}
-		if err := tx.Where("tenant_id = ? AND user_attribute_id = ? AND object_attribute_id = ?",
+		if err := tx.Where("tenant_id = ? AND subject_attribute_id = ? AND object_attribute_id = ?",
 			tenantID, uaID, oaID).FirstOrCreate(&assoc).Error; err != nil {
 			return err
 		}
@@ -309,7 +313,7 @@ func (h *Handler) DeleteRule(ctx context.Context, tenantID string, assocID uuid.
 
 		rev, _ := BumpRevision(tx, tenantID)
 		payload := map[string]any{
-			"ua_id": assoc.UserAttributeID,
+			"ua_id": assoc.SubjectAttributeID,
 			"oa_id": assoc.ObjectAttributeID,
 			"ops":   operations,
 		}
@@ -355,15 +359,6 @@ func (h *Handler) CreateDeny(ctx context.Context, tenantID string, subjectType P
 		return AppendChange(tx, tenantID, rev, "PROHIB_OP", OpAdd, payload)
 	})
 	return prohID, revision, err
-}
-
-// Backward compatibility aliases
-func (h *Handler) CreateSubjectGroup(ctx context.Context, tenantID string, ua *UserAttribute) (int64, error) {
-	return h.CreateSubjectSet(ctx, tenantID, ua)
-}
-
-func (h *Handler) CreateObjectGroup(ctx context.Context, tenantID string, oa *ObjectAttribute) (int64, error) {
-	return h.CreateObjectSet(ctx, tenantID, oa)
 }
 
 // DeleteDeny deletes a prohibition and records the change

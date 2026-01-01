@@ -26,14 +26,14 @@ func applyChange(s *Snapshot, ch postgres.PolicyChange) error {
 
 	case "ASSOC_OP":
 		var p struct {
-			UserAttributeID   uuid.UUID `json:"ua_id"`
-			ObjectAttributeID uuid.UUID `json:"oa_id"`
-			Operation         string    `json:"op"`
+			SubjectAttributeID uuid.UUID `json:"ua_id"`
+			ObjectAttributeID  uuid.UUID `json:"oa_id"`
+			Operation          string    `json:"op"`
 		}
 		if err := json.Unmarshal(ch.Payload, &p); err != nil {
 			return err
 		}
-		return applyAssocOp(s, ch.Op, p.UserAttributeID, p.ObjectAttributeID, p.Operation)
+		return applyAssocOp(s, ch.Op, p.SubjectAttributeID, p.ObjectAttributeID, p.Operation)
 
 	case "PROHIB_OP":
 		var p struct {
@@ -79,20 +79,20 @@ func applyAssignmentEdge(s *Snapshot, op postgres.ChangeOp,
 
 	switch {
 
-	// -------- USER -> UA --------
-	case childType == postgres.NodeUser && parentType == postgres.NodeUA:
+	// -------- SUBJECT -> UA --------
+	case childType == postgres.NodeSubject && parentType == postgres.NodeUA:
 		uaIdx, _ := ensureUAIdx(s, parentID)
 
 		// copy-on-write maps we mutate
-		s.userToUAs = cowMapSlice(s.userToUAs)
-		s.uaDirectUsers = cowMapSliceUUID(s.uaDirectUsers)
+		s.subjectToUAs = cowMapSlice(s.subjectToUAs)
+		s.uaDirectSubjects = cowMapSliceUUID(s.uaDirectSubjects)
 
 		if op == postgres.OpAdd {
-			s.userToUAs[childID] = addU32Unique(s.userToUAs[childID], uaIdx)
-			s.uaDirectUsers[uaIdx] = addUUIDUnique(s.uaDirectUsers[uaIdx], childID)
+			s.subjectToUAs[childID] = addU32Unique(s.subjectToUAs[childID], uaIdx)
+			s.uaDirectSubjects[uaIdx] = addUUIDUnique(s.uaDirectSubjects[uaIdx], childID)
 		} else if op == postgres.OpRemove {
-			s.userToUAs[childID] = removeU32(s.userToUAs[childID], uaIdx)
-			s.uaDirectUsers[uaIdx] = removeUUID(s.uaDirectUsers[uaIdx], childID)
+			s.subjectToUAs[childID] = removeU32(s.subjectToUAs[childID], uaIdx)
+			s.uaDirectSubjects[uaIdx] = removeUUID(s.uaDirectSubjects[uaIdx], childID)
 		}
 		return nil
 
@@ -228,12 +228,12 @@ func applyAssocOp(s *Snapshot, op postgres.ChangeOp, uaID, oaID uuid.UUID, opera
 func applyProhibOp(s *Snapshot, op postgres.ChangeOp, subjectType postgres.ProhibitionSubjectType, subjectID uuid.UUID, oaID uuid.UUID, operation string) error {
 	oaIdx, _ := ensureOAIdx(s, oaID)
 
-	if subjectType == postgres.ProhibitUser {
-		s.userProhibits = cowMapUserOps(s.userProhibits)
-		if s.userProhibits[subjectID] == nil {
-			s.userProhibits[subjectID] = make(map[string]*roaring.Bitmap)
+	if subjectType == postgres.ProhibitSubject {
+		s.subjectProhibits = cowMapSubjectOps(s.subjectProhibits)
+		if s.subjectProhibits[subjectID] == nil {
+			s.subjectProhibits[subjectID] = make(map[string]*roaring.Bitmap)
 		}
-		b := s.userProhibits[subjectID][operation]
+		b := s.subjectProhibits[subjectID][operation]
 		if b == nil {
 			b = roaring.New()
 		} else {
@@ -244,7 +244,7 @@ func applyProhibOp(s *Snapshot, op postgres.ChangeOp, subjectType postgres.Prohi
 		} else if op == postgres.OpRemove {
 			b.Remove(oaIdx)
 		}
-		s.userProhibits[subjectID][operation] = b
+		s.subjectProhibits[subjectID][operation] = b
 		return nil
 	}
 
@@ -302,7 +302,7 @@ func cowMapAssoc(m map[uint32]map[string]*roaring.Bitmap) map[uint32]map[string]
 	}
 	return cp
 }
-func cowMapUserOps(m map[uuid.UUID]map[string]*roaring.Bitmap) map[uuid.UUID]map[string]*roaring.Bitmap {
+func cowMapSubjectOps(m map[uuid.UUID]map[string]*roaring.Bitmap) map[uuid.UUID]map[string]*roaring.Bitmap {
 	cp := make(map[uuid.UUID]map[string]*roaring.Bitmap, len(m))
 	for k, v := range m {
 		cp[k] = v

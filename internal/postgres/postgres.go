@@ -82,7 +82,9 @@ func New(opts *Options) (*Handler, error) {
 		&Subject{},
 		&Object{},
 		&PolicyClass{},
-		&UserAttribute{},
+		&SubjectSet{},
+		&ObjectSet{},
+		&SubjectAttribute{},
 		&ObjectAttribute{},
 		&AssignmentEdge{},
 		&Association{},
@@ -124,7 +126,7 @@ func New(opts *Options) (*Handler, error) {
 		`CREATE UNIQUE INDEX IF NOT EXISTS uidx_objects_tenant_external ON objects (tenant_id, external_id);`,
 
 		// UA/OA/PC unique names per tenant
-		`CREATE UNIQUE INDEX IF NOT EXISTS uidx_ua_tenant_name ON user_attributes (tenant_id, name);`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS uidx_ua_tenant_name ON subject_attributes (tenant_id, name);`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS uidx_oa_tenant_name ON object_attributes (tenant_id, name);`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS uidx_pc_tenant_name ON policy_classes (tenant_id, name);`,
 
@@ -134,7 +136,7 @@ func New(opts *Options) (*Handler, error) {
 
 		// Association uniqueness and operations uniqueness
 		`CREATE UNIQUE INDEX IF NOT EXISTS uidx_assoc_uatoa ON associations
-		 (tenant_id, user_attribute_id, object_attribute_id);`,
+		 (tenant_id, subject_attribute_id, object_attribute_id);`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS uidx_assocop ON association_operations
 		 (tenant_id, association_id, operation);`,
 
@@ -145,7 +147,7 @@ func New(opts *Options) (*Handler, error) {
 		// Fast lookups for subject/object traversal
 		`CREATE INDEX IF NOT EXISTS idx_asg_child_lookup ON assignment_edges (tenant_id, child_type, child_id);`,
 		`CREATE INDEX IF NOT EXISTS idx_asg_parent_lookup ON assignment_edges (tenant_id, parent_type, parent_id);`,
-		`CREATE INDEX IF NOT EXISTS idx_assoc_ua_lookup ON associations (tenant_id, user_attribute_id);`,
+		`CREATE INDEX IF NOT EXISTS idx_assoc_ua_lookup ON associations (tenant_id, subject_attribute_id);`,
 		`CREATE INDEX IF NOT EXISTS idx_assoc_oa_lookup ON associations (tenant_id, object_attribute_id);`,
 
 		// Fast lookups for policy changes

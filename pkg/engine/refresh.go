@@ -72,7 +72,7 @@ func (e *Engine) RefreshIncremental(ctx context.Context) error {
 
 	// 4) Atomically swap + clear closure caches
 	e.cur.Store(next)
-	e.computeUserOpInvalidationsFromOADescChanges(s, inv)
+	e.computeSubjectOpInvalidationsFromOADescChanges(s, inv)
 	e.applyInvalidations(inv)
 	e.caches.UACache.Clear()
 	e.caches.OACache.Clear()
@@ -83,15 +83,15 @@ func (e *Engine) RefreshIncremental(ctx context.Context) error {
 }
 
 func (e *Engine) Warmup(s *Snapshot, inv *invalidation) {
-	// Warm user closures
-	for u := range inv.usersUAClosure {
-		ua := e.userUAClosure(s, u)
+	// Warm subject closures
+	for u := range inv.subjectsUAClosure {
+		ua := e.subjectUAClosure(s, u)
 		_ = ua
-		// If you track which ops were affected in inv.userAllowOp/userDenyOp:
-		for op := range inv.userAllowOp[u] {
+		// If you track which ops were affected in inv.subjectAllowOp/subjectDenyOp:
+		for op := range inv.subjectAllowOp[u] {
 			e.allowedFor(s, u, op, ua)
 		}
-		for op := range inv.userDenyOp[u] {
+		for op := range inv.subjectDenyOp[u] {
 			e.deniedFor(s, u, op, ua)
 		}
 	}
@@ -126,7 +126,7 @@ func validateSeqContinuity(lastSeq int64, changes []postgres.PolicyChange) bool 
 	return true
 }
 
-func (e *Engine) computeUserOpInvalidationsFromOADescChanges(s *Snapshot, inv *invalidation) {
+func (e *Engine) computeSubjectOpInvalidationsFromOADescChanges(s *Snapshot, inv *invalidation) {
 	if len(inv.oaDescClosures) == 0 {
 		return
 	}
@@ -136,46 +136,46 @@ func (e *Engine) computeUserOpInvalidationsFromOADescChanges(s *Snapshot, inv *i
 		affected.Add(oa)
 	}
 
-	// Associations: if UA has targets intersecting affected OA nodes, invalidate allow for users in UA subtree.
+	// Associations: if UA has targets intersecting affected OA nodes, invalidate allow for subjects in UA subtree.
 	for uaIdx, opMap := range s.assoc {
 		for op, targets := range opMap {
 			if targets == nil || !targets.Intersects(affected) {
 				continue
 			}
-			for _, u := range s.UsersInUASubtree(uaIdx) {
-				if inv.userAllowOp[u] == nil {
-					inv.userAllowOp[u] = map[string]struct{}{}
+			for _, u := range s.SubjectsInUASubtree(uaIdx) {
+				if inv.subjectAllowOp[u] == nil {
+					inv.subjectAllowOp[u] = map[string]struct{}{}
 				}
-				inv.userAllowOp[u][op] = struct{}{}
+				inv.subjectAllowOp[u][op] = struct{}{}
 			}
 		}
 	}
 
-	// UA prohibitions: invalidate deny for users in UA subtree if targets intersect affected.
+	// UA prohibitions: invalidate deny for subjects in UA subtree if targets intersect affected.
 	for uaIdx, opMap := range s.uaProhibits {
 		for op, targets := range opMap {
 			if targets == nil || !targets.Intersects(affected) {
 				continue
 			}
-			for _, u := range s.UsersInUASubtree(uaIdx) {
-				if inv.userDenyOp[u] == nil {
-					inv.userDenyOp[u] = map[string]struct{}{}
+			for _, u := range s.SubjectsInUASubtree(uaIdx) {
+				if inv.subjectDenyOp[u] == nil {
+					inv.subjectDenyOp[u] = map[string]struct{}{}
 				}
-				inv.userDenyOp[u][op] = struct{}{}
+				inv.subjectDenyOp[u][op] = struct{}{}
 			}
 		}
 	}
 
-	// User prohibitions: invalidate deny(user,op) if targets intersect affected.
-	for userID, opMap := range s.userProhibits {
+	// Subject prohibitions: invalidate deny(subject,op) if targets intersect affected.
+	for subjectID, opMap := range s.subjectProhibits {
 		for op, targets := range opMap {
 			if targets == nil || !targets.Intersects(affected) {
 				continue
 			}
-			if inv.userDenyOp[userID] == nil {
-				inv.userDenyOp[userID] = map[string]struct{}{}
+			if inv.subjectDenyOp[subjectID] == nil {
+				inv.subjectDenyOp[subjectID] = map[string]struct{}{}
 			}
-			inv.userDenyOp[userID][op] = struct{}{}
+			inv.subjectDenyOp[subjectID][op] = struct{}{}
 		}
 	}
 }

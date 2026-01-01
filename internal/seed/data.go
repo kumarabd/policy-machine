@@ -15,7 +15,7 @@ type SeedData struct {
 	// Core entities
 	Subjects      []postgres.Subject
 	Objects       []postgres.Object
-	SubjectSets   []postgres.UserAttribute
+	SubjectSets   []postgres.SubjectAttribute
 	ObjectSets    []postgres.ObjectAttribute
 	PolicyClasses []postgres.PolicyClass
 
@@ -66,7 +66,7 @@ func GetSeedData(tenantID string) *SeedData {
 	subjGrace := uuid.MustParse("10000000-0000-0000-0000-000000000007")
 	subjHenry := uuid.MustParse("10000000-0000-0000-0000-000000000008")
 
-	// Subject Sets (UserAttributes)
+	// Subject Sets (SubjectAttributes)
 	uaEngineering := uuid.MustParse("20000000-0000-0000-0000-000000000001")
 	uaBackend := uuid.MustParse("20000000-0000-0000-0000-000000000002")
 	uaFrontend := uuid.MustParse("20000000-0000-0000-0000-000000000003")
@@ -114,7 +114,7 @@ func GetSeedData(tenantID string) *SeedData {
 			{ID: subjGrace, TenantID: tenantID, ExternalID: "grace.lee", Email: "grace.lee@acme.com", Display: "Grace Lee", CreatedAt: now.Add(-400 * 24 * time.Hour)},
 			{ID: subjHenry, TenantID: tenantID, ExternalID: "henry.wilson", Email: "henry.wilson@acme.com", Display: "Henry Wilson", CreatedAt: now.Add(-500 * 24 * time.Hour)},
 		},
-		SubjectSets: []postgres.UserAttribute{
+		SubjectSets: []postgres.SubjectAttribute{
 			{ID: uaEngineering, TenantID: tenantID, Name: "Engineering Team", CreatedAt: now.Add(-730 * 24 * time.Hour)},
 			{ID: uaBackend, TenantID: tenantID, Name: "Backend Developers", CreatedAt: now.Add(-365 * 24 * time.Hour)},
 			{ID: uaFrontend, TenantID: tenantID, Name: "Frontend Developers", CreatedAt: now.Add(-365 * 24 * time.Hour)},
@@ -129,7 +129,7 @@ func GetSeedData(tenantID string) *SeedData {
 			{ID: objProjectPortal, TenantID: tenantID, ExternalID: "project/customer-portal-redesign", Type: "project", CreatedAt: now.Add(-60 * 24 * time.Hour)},
 			{ID: objRepoEngine, TenantID: tenantID, ExternalID: "repo/policy-engine", Type: "repository", CreatedAt: now.Add(-730 * 24 * time.Hour)},
 			{ID: objSecretDB, TenantID: tenantID, ExternalID: "secret/db-prod-credentials", Type: "secret", CreatedAt: now.Add(-365 * 24 * time.Hour)},
-			{ID: objAPIManagement, TenantID: tenantID, ExternalID: "api/user-management-v2", Type: "api", CreatedAt: now.Add(-180 * 24 * time.Hour)},
+			{ID: objAPIManagement, TenantID: tenantID, ExternalID: "api/subject-management-v2", Type: "api", CreatedAt: now.Add(-180 * 24 * time.Hour)},
 			{ID: objRepoFrontend, TenantID: tenantID, ExternalID: "repo/frontend-app", Type: "repository", CreatedAt: now.Add(-450 * 24 * time.Hour)},
 			{ID: objSecretAWS, TenantID: tenantID, ExternalID: "secret/aws-access-key-prod", Type: "secret", CreatedAt: now.Add(-200 * 24 * time.Hour)},
 			{ID: objAPIAnalytics, TenantID: tenantID, ExternalID: "api/analytics-v1", Type: "api", CreatedAt: now.Add(-300 * 24 * time.Hour)},
@@ -152,13 +152,13 @@ func GetSeedData(tenantID string) *SeedData {
 		},
 		Relationships: []postgres.AssignmentEdge{
 			// Subject -> Subject Set relationships
-			{ID: uuid.MustParse("60000000-0000-0000-0000-000000000001"), TenantID: tenantID, ChildType: postgres.NodeUser, ChildID: subjAlice, ParentType: postgres.NodeUA, ParentID: uaEngineering, CreatedAt: now.Add(-365 * 24 * time.Hour)},
-			{ID: uuid.MustParse("60000000-0000-0000-0000-000000000002"), TenantID: tenantID, ChildType: postgres.NodeUser, ChildID: subjBob, ParentType: postgres.NodeUA, ParentID: uaEngineering, CreatedAt: now.Add(-180 * 24 * time.Hour)},
-			{ID: uuid.MustParse("60000000-0000-0000-0000-000000000003"), TenantID: tenantID, ChildType: postgres.NodeUser, ChildID: subjAlice, ParentType: postgres.NodeUA, ParentID: uaBackend, CreatedAt: now.Add(-365 * 24 * time.Hour)},
-			{ID: uuid.MustParse("60000000-0000-0000-0000-000000000004"), TenantID: tenantID, ChildType: postgres.NodeUser, ChildID: subjBob, ParentType: postgres.NodeUA, ParentID: uaFrontend, CreatedAt: now.Add(-180 * 24 * time.Hour)},
-			{ID: uuid.MustParse("60000000-0000-0000-0000-000000000005"), TenantID: tenantID, ChildType: postgres.NodeUser, ChildID: subjCarol, ParentType: postgres.NodeUA, ParentID: uaManagement, CreatedAt: now.Add(-730 * 24 * time.Hour)},
-			{ID: uuid.MustParse("60000000-0000-0000-0000-000000000006"), TenantID: tenantID, ChildType: postgres.NodeUser, ChildID: subjDavid, ParentType: postgres.NodeUA, ParentID: uaOperations, CreatedAt: now.Add(-240 * 24 * time.Hour)},
-			{ID: uuid.MustParse("60000000-0000-0000-0000-000000000007"), TenantID: tenantID, ChildType: postgres.NodeUser, ChildID: subjHenry, ParentType: postgres.NodeUA, ParentID: uaSecurity, CreatedAt: now.Add(-500 * 24 * time.Hour)},
+			{ID: uuid.MustParse("60000000-0000-0000-0000-000000000001"), TenantID: tenantID, ChildType: postgres.NodeSubject, ChildID: subjAlice, ParentType: postgres.NodeUA, ParentID: uaEngineering, CreatedAt: now.Add(-365 * 24 * time.Hour)},
+			{ID: uuid.MustParse("60000000-0000-0000-0000-000000000002"), TenantID: tenantID, ChildType: postgres.NodeSubject, ChildID: subjBob, ParentType: postgres.NodeUA, ParentID: uaEngineering, CreatedAt: now.Add(-180 * 24 * time.Hour)},
+			{ID: uuid.MustParse("60000000-0000-0000-0000-000000000003"), TenantID: tenantID, ChildType: postgres.NodeSubject, ChildID: subjAlice, ParentType: postgres.NodeUA, ParentID: uaBackend, CreatedAt: now.Add(-365 * 24 * time.Hour)},
+			{ID: uuid.MustParse("60000000-0000-0000-0000-000000000004"), TenantID: tenantID, ChildType: postgres.NodeSubject, ChildID: subjBob, ParentType: postgres.NodeUA, ParentID: uaFrontend, CreatedAt: now.Add(-180 * 24 * time.Hour)},
+			{ID: uuid.MustParse("60000000-0000-0000-0000-000000000005"), TenantID: tenantID, ChildType: postgres.NodeSubject, ChildID: subjCarol, ParentType: postgres.NodeUA, ParentID: uaManagement, CreatedAt: now.Add(-730 * 24 * time.Hour)},
+			{ID: uuid.MustParse("60000000-0000-0000-0000-000000000006"), TenantID: tenantID, ChildType: postgres.NodeSubject, ChildID: subjDavid, ParentType: postgres.NodeUA, ParentID: uaOperations, CreatedAt: now.Add(-240 * 24 * time.Hour)},
+			{ID: uuid.MustParse("60000000-0000-0000-0000-000000000007"), TenantID: tenantID, ChildType: postgres.NodeSubject, ChildID: subjHenry, ParentType: postgres.NodeUA, ParentID: uaSecurity, CreatedAt: now.Add(-500 * 24 * time.Hour)},
 
 			// Subject Set -> Subject Set (hierarchical)
 			{ID: uuid.MustParse("60000000-0000-0000-0000-000000000008"), TenantID: tenantID, ChildType: postgres.NodeUA, ChildID: uaBackend, ParentType: postgres.NodeUA, ParentID: uaEngineering, CreatedAt: now.Add(-365 * 24 * time.Hour)},
@@ -207,12 +207,12 @@ func GetSeedData(tenantID string) *SeedData {
 			{UAID: uaEngineering, OAID: oaInternalAPIs, Operations: []string{"read", "write"}},
 		},
 		Prohibitions: []ProhibitionSeed{
-			// Prohibit individual user (Bob) from accessing Sensitive Data
-			{SubjectType: postgres.ProhibitUser, SubjectID: subjBob, OAID: oaSensitiveData, Operations: []string{"read", "write", "delete"}},
+			// Prohibit individual subject (Bob) from accessing Sensitive Data
+			{SubjectType: postgres.ProhibitSubject, SubjectID: subjBob, OAID: oaSensitiveData, Operations: []string{"read", "write", "delete"}},
 			// Prohibit Frontend Developers from accessing Production Secrets
 			{SubjectType: postgres.ProhibitUA, SubjectID: uaFrontend, OAID: oaProdSecrets, Operations: []string{"read", "write", "delete"}},
-			// Prohibit individual user (Eve) from deleting Public Documents
-			{SubjectType: postgres.ProhibitUser, SubjectID: subjEve, OAID: oaPublicDocs, Operations: []string{"delete"}},
+			// Prohibit individual subject (Eve) from deleting Public Documents
+			{SubjectType: postgres.ProhibitSubject, SubjectID: subjEve, OAID: oaPublicDocs, Operations: []string{"delete"}},
 		},
 		Obligations: []postgres.Obligation{
 			{

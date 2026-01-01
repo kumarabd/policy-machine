@@ -14,16 +14,22 @@ func LoadSnapshot(ctx context.Context, db *gorm.DB, tenantID string) (*Snapshot,
 		TenantID: tenantID,
 
 		uaIndex: make(map[uuid.UUID]uint32),
+		uaByIdx: make([]uuid.UUID, 0),
 		oaIndex: make(map[uuid.UUID]uint32),
+		oaByIdx: make([]uuid.UUID, 0),
 
-		userToUAs:   make(map[uuid.UUID][]uint32),
-		uaParents:   make(map[uint32][]uint32),
-		objectToOAs: make(map[uuid.UUID][]uint32),
-		oaParents:   make(map[uint32][]uint32),
+		subjectToUAs:     make(map[uuid.UUID][]uint32),
+		uaParents:        make(map[uint32][]uint32),
+		uaChildren:       make(map[uint32][]uint32),
+		uaDirectSubjects: make(map[uint32][]uuid.UUID),
+		objectToOAs:      make(map[uuid.UUID][]uint32),
+		oaParents:        make(map[uint32][]uint32),
+		oaChildren:       make(map[uint32][]uint32),
+		oaDirectObjects:  make(map[uint32][]uuid.UUID),
 
-		assoc:         make(map[uint32]map[string]*roaring.Bitmap),
-		userProhibits: make(map[uuid.UUID]map[string]*roaring.Bitmap),
-		uaProhibits:   make(map[uint32]map[string]*roaring.Bitmap),
+		assoc:            make(map[uint32]map[string]*roaring.Bitmap),
+		subjectProhibits: make(map[uuid.UUID]map[string]*roaring.Bitmap),
+		uaProhibits:      make(map[uint32]map[string]*roaring.Bitmap),
 
 		pcIndex: make(map[uuid.UUID]uint32),
 		pcByIdx: make([]uuid.UUID, 0),
@@ -32,8 +38,9 @@ func LoadSnapshot(ctx context.Context, db *gorm.DB, tenantID string) (*Snapshot,
 	}
 
 	// 1) Load UA/OA tables to create dense indices
-	var uas []postgres.UserAttribute
+	var uas []postgres.SubjectAttribute
 	if err := db.WithContext(ctx).
+		Model(&postgres.SubjectAttribute{}).
 		Where("tenant_id = ?", tenantID).
 		Find(&uas).Error; err != nil {
 		return nil, err
@@ -46,6 +53,7 @@ func LoadSnapshot(ctx context.Context, db *gorm.DB, tenantID string) (*Snapshot,
 
 	var oas []postgres.ObjectAttribute
 	if err := db.WithContext(ctx).
+		Model(&postgres.ObjectAttribute{}).
 		Where("tenant_id = ?", tenantID).
 		Find(&oas).Error; err != nil {
 		return nil, err
@@ -59,6 +67,7 @@ func LoadSnapshot(ctx context.Context, db *gorm.DB, tenantID string) (*Snapshot,
 	// Load policy classes
 	var pcs []postgres.PolicyClass
 	if err := db.WithContext(ctx).
+		Model(&postgres.PolicyClass{}).
 		Where("tenant_id = ?", tenantID).
 		Find(&pcs).Error; err != nil {
 		return nil, err
@@ -73,6 +82,7 @@ func LoadSnapshot(ctx context.Context, db *gorm.DB, tenantID string) (*Snapshot,
 	// 2) Load assignment edges (typed)
 	var edges []postgres.AssignmentEdge
 	if err := db.WithContext(ctx).
+		Model(&postgres.AssignmentEdge{}).
 		Where("tenant_id = ?", tenantID).
 		Find(&edges).Error; err != nil {
 		return nil, err
@@ -80,14 +90,14 @@ func LoadSnapshot(ctx context.Context, db *gorm.DB, tenantID string) (*Snapshot,
 
 	for _, e := range edges {
 		switch {
-		// user -> UA
-		case e.ChildType == postgres.NodeUser && e.ParentType == postgres.NodeUA:
+		// subject -> UA
+		case e.ChildType == postgres.NodeSubject && e.ParentType == postgres.NodeUA:
 			uaIdx, ok := s.uaIndex[e.ParentID]
 			if !ok {
 				continue
 			}
-			s.userToUAs[e.ChildID] = append(s.userToUAs[e.ChildID], uaIdx)
-			s.uaDirectUsers[uaIdx] = append(s.uaDirectUsers[uaIdx], e.ChildID)
+			s.subjectToUAs[e.ChildID] = append(s.subjectToUAs[e.ChildID], uaIdx)
+			s.uaDirectSubjects[uaIdx] = append(s.uaDirectSubjects[uaIdx], e.ChildID)
 
 		// UA -> UA
 		case e.ChildType == postgres.NodeUA && e.ParentType == postgres.NodeUA:
@@ -147,6 +157,7 @@ func LoadSnapshot(ctx context.Context, db *gorm.DB, tenantID string) (*Snapshot,
 	// 3) Load associations + operations
 	var assocs []postgres.Association
 	if err := db.WithContext(ctx).
+		Model(&postgres.Association{}).
 		Where("tenant_id = ?", tenantID).
 		Find(&assocs).Error; err != nil {
 		return nil, err
@@ -156,7 +167,7 @@ func LoadSnapshot(ctx context.Context, db *gorm.DB, tenantID string) (*Snapshot,
 	type assocKey struct{ ua, oa uint32 }
 	assocMap := make(map[uuid.UUID]assocKey, len(assocs))
 	for _, a := range assocs {
-		uaIdx, ok1 := s.uaIndex[a.UserAttributeID]
+		uaIdx, ok1 := s.uaIndex[a.SubjectAttributeID]
 		oaIdx, ok2 := s.oaIndex[a.ObjectAttributeID]
 		if !ok1 || !ok2 {
 			continue
@@ -166,6 +177,7 @@ func LoadSnapshot(ctx context.Context, db *gorm.DB, tenantID string) (*Snapshot,
 
 	var assocOps []postgres.AssociationOperation
 	if err := db.WithContext(ctx).
+		Model(&postgres.AssociationOperation{}).
 		Where("tenant_id = ?", tenantID).
 		Find(&assocOps).Error; err != nil {
 		return nil, err
@@ -188,6 +200,7 @@ func LoadSnapshot(ctx context.Context, db *gorm.DB, tenantID string) (*Snapshot,
 	// 4) Load prohibitions + operations
 	var prohs []postgres.Prohibition
 	if err := db.WithContext(ctx).
+		Model(&postgres.Prohibition{}).
 		Where("tenant_id = ?", tenantID).
 		Find(&prohs).Error; err != nil {
 		return nil, err
@@ -210,6 +223,7 @@ func LoadSnapshot(ctx context.Context, db *gorm.DB, tenantID string) (*Snapshot,
 
 	var prohOps []postgres.ProhibitionOperation
 	if err := db.WithContext(ctx).
+		Model(&postgres.ProhibitionOperation{}).
 		Where("tenant_id = ?", tenantID).
 		Find(&prohOps).Error; err != nil {
 		return nil, err
@@ -221,14 +235,14 @@ func LoadSnapshot(ctx context.Context, db *gorm.DB, tenantID string) (*Snapshot,
 			continue
 		}
 		switch pk.subjType {
-		case postgres.ProhibitUser:
-			if s.userProhibits[pk.subjID] == nil {
-				s.userProhibits[pk.subjID] = make(map[string]*roaring.Bitmap)
+		case postgres.ProhibitSubject:
+			if s.subjectProhibits[pk.subjID] == nil {
+				s.subjectProhibits[pk.subjID] = make(map[string]*roaring.Bitmap)
 			}
-			if s.userProhibits[pk.subjID][po.Operation] == nil {
-				s.userProhibits[pk.subjID][po.Operation] = roaring.New()
+			if s.subjectProhibits[pk.subjID][po.Operation] == nil {
+				s.subjectProhibits[pk.subjID][po.Operation] = roaring.New()
 			}
-			s.userProhibits[pk.subjID][po.Operation].Add(pk.oa)
+			s.subjectProhibits[pk.subjID][po.Operation].Add(pk.oa)
 
 		case postgres.ProhibitUA:
 			uaIdx, ok := s.uaIndex[pk.subjID]

@@ -28,15 +28,15 @@ type Engine struct {
     cur atomic.Pointer[Snapshot]  // Current immutable snapshot
 
     // Closure caches (TTL-based)
-    uaCache closureCache[uuid.UUID]      // User → UA closure
+    uaCache closureCache[uuid.UUID]      // Subject → UA closure
     oaCache closureCache[uuid.UUID]      // Object → OA closure
     uaNodeClosure closureCache[uint32]   // UA node → ancestors
     oaNodeClosure closureCache[uint32]   // OA node → ancestors
     oaDescClosure closureCache[uint32]   // OA node → descendants
 
     // Operation caches (TTL-based)
-    allowCache *userOpBitmapCache        // User+Op → allowed OA bitmap
-    denyCache  *userOpBitmapCache        // User+Op → denied OA bitmap
+    allowCache *subjectOpBitmapCache        // Subject+Op → allowed OA bitmap
+    denyCache  *subjectOpBitmapCache        // Subject+Op → denied OA bitmap
 
     // Decision cache (TTL-based, indexed)
     decisions *indexedDecisionCache
@@ -50,7 +50,7 @@ type Engine struct {
 
 1. **Atomic Snapshot Pointer**: Enables lock-free reads
 2. **Separate Caches**: Different TTLs for different cache types
-3. **Indexed Decision Cache**: Fast invalidation by user/object/operation
+3. **Indexed Decision Cache**: Fast invalidation by subject/object/operation
 4. **Mutex for Refresh**: Ensures only one update at a time
 
 ## Snapshot Architecture
@@ -78,10 +78,10 @@ type Snapshot struct {
     oaToPCs map[uint32]*roaring.Bitmap  // OA idx → PC bitmaps
 
     // Assignment graphs
-    userToUAs     map[uuid.UUID][]uint32  // User → direct UA children
+    subjectToUAs     map[uuid.UUID][]uint32  // Subject → direct UA children
     uaParents     map[uint32][]uint32     // UA → parent UAs
     uaChildren    map[uint32][]uint32     // UA → child UAs
-    uaDirectUsers map[uint32][]uuid.UUID  // UA → direct user children
+    uaDirectSubjects map[uint32][]uuid.UUID  // UA → direct subject children
 
     objectToOAs     map[uuid.UUID][]uint32  // Object → direct OA children
     oaParents       map[uint32][]uint32     // OA → parent OAs
@@ -92,7 +92,7 @@ type Snapshot struct {
     assoc map[uint32]map[string]*roaring.Bitmap  // UA idx → op → OA bitmap
 
     // Prohibitions
-    userProhibits map[uuid.UUID]map[string]*roaring.Bitmap  // User → op → OA bitmap
+    subjectProhibits map[uuid.UUID]map[string]*roaring.Bitmap  // Subject → op → OA bitmap
     uaProhibits   map[uint32]map[string]*roaring.Bitmap    // UA idx → op → OA bitmap
 }
 ```
@@ -118,7 +118,7 @@ type Snapshot struct {
 The `Decide` function (`pkg/engine/engine.go:168`) implements the NGAC decision algorithm:
 
 ```go
-func (e *Engine) Decide(ctx context.Context, userID, objectID uuid.UUID, op string) (bool, error) {
+func (e *Engine) Decide(ctx context.Context, subjectID, objectID uuid.UUID, op string) (bool, error) {
     // 1. Get current snapshot (atomic read)
     s := e.Snapshot()
     if s == nil {
@@ -129,26 +129,26 @@ func (e *Engine) Decide(ctx context.Context, userID, objectID uuid.UUID, op stri
     }
 
     // 2. Check decision cache
-    if allowed, ok := e.decisions.Get(userID, objectID, op, s.Version); ok {
+    if allowed, ok := e.decisions.Get(subjectID, objectID, op, s.Version); ok {
         return allowed, nil
     }
 
     // 3. Compute closures
-    uaClosure := e.userUAClosure(s, userID)
+    uaClosure := e.subjectUAClosure(s, subjectID)
     oaClosure := e.objectOAClosure(s, objectID)
 
     // 4. Policy class intersection
-    userPCs := computeUserPCs(s, uaClosure)
+    subjectPCs := computeSubjectPCs(s, uaClosure)
     objPCs := computeObjectPCs(s, oaClosure)
-    userPCs.And(objPCs)
-    if userPCs.IsEmpty() {
-        e.decisions.Put(userID, objectID, op, false, s.Version)
+    subjectPCs.And(objPCs)
+    if subjectPCs.IsEmpty() {
+        e.decisions.Put(subjectID, objectID, op, false, s.Version)
         return false, nil
     }
 
     // 5. Compute allow/deny
-    allowedBmp := e.allowedFor(s, userID, op, uaClosure)
-    deniedBmp := e.deniedFor(s, userID, op, uaClosure)
+    allowedBmp := e.allowedFor(s, subjectID, op, uaClosure)
+    deniedBmp := e.deniedFor(s, subjectID, op, uaClosure)
 
     // 6. Final decision: (allowed - denied) ∩ oaClosure
     effective := allowedBmp.Clone()
@@ -156,7 +156,7 @@ func (e *Engine) Decide(ctx context.Context, userID, objectID uuid.UUID, op stri
     effective.And(oaClosure)
 
     allowed := !effective.IsEmpty()
-    e.decisions.Put(userID, objectID, op, allowed, s.Version)
+    e.decisions.Put(subjectID, objectID, op, allowed, s.Version)
     return allowed, nil
 }
 ```
@@ -174,14 +174,14 @@ func (e *Engine) Decide(ctx context.Context, userID, objectID uuid.UUID, op stri
 - Return immediately if cache hit
 
 #### Step 3: Closure Computation
-- **UA Closure**: All UAs reachable from user (via assignments)
+- **UA Closure**: All UAs reachable from subject (via assignments)
 - **OA Closure**: All OAs reachable from object (via assignments)
 - Both use cached closures when available
 
 #### Step 4: Policy Class Check
-- Compute policy classes for user (via UA closure)
+- Compute policy classes for subject (via UA closure)
 - Compute policy classes for object (via OA closure)
-- Intersection must be non-empty (users and objects must share at least one PC)
+- Intersection must be non-empty (subjects and objects must share at least one PC)
 - Early return if no shared PC (deny)
 
 #### Step 5: Allow/Deny Computation
@@ -197,9 +197,9 @@ func (e *Engine) Decide(ctx context.Context, userID, objectID uuid.UUID, op stri
 ### Allow Computation
 
 ```go
-func (e *Engine) allowedFor(s *Snapshot, user uuid.UUID, op string, uaClosure *roaring.Bitmap) *roaring.Bitmap {
+func (e *Engine) allowedFor(s *Snapshot, subject uuid.UUID, op string, uaClosure *roaring.Bitmap) *roaring.Bitmap {
     // Check cache
-    if b, ok := e.allowCache.Get(user, op); ok {
+    if b, ok := e.allowCache.Get(subject, op); ok {
         return b
     }
 
@@ -219,13 +219,13 @@ func (e *Engine) allowedFor(s *Snapshot, user uuid.UUID, op string, uaClosure *r
         }
     }
 
-    e.allowCache.Put(user, op, allowed)
+    e.allowCache.Put(subject, op, allowed)
     return allowed
 }
 ```
 
 **Key Points:**
-- Iterates over all UAs in user's closure
+- Iterates over all UAs in subject's closure
 - For each UA, finds associations for the operation
 - Expands OA targets to descendants (hierarchical)
 - Unions all results into single bitmap
@@ -233,9 +233,9 @@ func (e *Engine) allowedFor(s *Snapshot, user uuid.UUID, op string, uaClosure *r
 ### Deny Computation
 
 ```go
-func (e *Engine) deniedFor(s *Snapshot, user uuid.UUID, op string, uaClosure *roaring.Bitmap) *roaring.Bitmap {
+func (e *Engine) deniedFor(s *Snapshot, subject uuid.UUID, op string, uaClosure *roaring.Bitmap) *roaring.Bitmap {
     // Check cache
-    if b, ok := e.denyCache.Get(user, op); ok {
+    if b, ok := e.denyCache.Get(subject, op); ok {
         return b
     }
 
@@ -260,8 +260,8 @@ func (e *Engine) deniedFor(s *Snapshot, user uuid.UUID, op string, uaClosure *ro
         }
     }
 
-    // User-level prohibitions
-    if opMap := s.userProhibits[user]; opMap != nil {
+    // Subject-level prohibitions
+    if opMap := s.subjectProhibits[subject]; opMap != nil {
         if targets := opMap[op]; targets != nil {
             tit := targets.Iterator()
             for tit.HasNext() {
@@ -271,49 +271,49 @@ func (e *Engine) deniedFor(s *Snapshot, user uuid.UUID, op string, uaClosure *ro
         }
     }
 
-    e.denyCache.Put(user, op, denied)
+    e.denyCache.Put(subject, op, denied)
     return denied
 }
 ```
 
 **Key Points:**
-- Checks both UA-level and user-level prohibitions
+- Checks both UA-level and subject-level prohibitions
 - Expands OA targets to descendants
 - Unions all prohibitions into single bitmap
 
 ## Closure Computation
 
-### User UA Closure
+### Subject UA Closure
 
-The user UA closure is the set of all UAs reachable from a user via assignment edges:
+The subject UA closure is the set of all UAs reachable from a subject via assignment edges:
 
 ```go
-func (e *Engine) userUAClosure(s *Snapshot, userID uuid.UUID) *roaring.Bitmap {
+func (e *Engine) subjectUAClosure(s *Snapshot, subjectID uuid.UUID) *roaring.Bitmap {
     // Check cache
-    if bmp, ok := e.uaCache.Get(userID); ok {
+    if bmp, ok := e.uaCache.Get(subjectID); ok {
         return bmp
     }
 
-    // Start with user's direct UA assignments
+    // Start with subject's direct UA assignments
     out := roaring.New()
-    for _, ua := range s.userToUAs[userID] {
+    for _, ua := range s.subjectToUAs[subjectID] {
         // Get all ancestors of this UA (including itself)
         out.Or(e.uaNodeAllParents(s, ua))
     }
 
-    e.uaCache.Put(userID, out)
+    e.uaCache.Put(subjectID, out)
     return out
 }
 ```
 
 **Algorithm:**
-1. Get user's direct UA assignments
+1. Get subject's direct UA assignments
 2. For each UA, compute its ancestor closure (including itself)
 3. Union all results
 
 ### Object OA Closure
 
-Similar to user UA closure, but for objects:
+Similar to subject UA closure, but for objects:
 
 ```go
 func (e *Engine) objectOAClosure(s *Snapshot, objectID uuid.UUID) *roaring.Bitmap {
@@ -458,7 +458,7 @@ During snapshot loading (`pkg/engine/load.go`):
 
 ```go
 // Load UAs and create dense indices
-var uas []postgres.UserAttribute
+var uas []postgres.SubjectAttribute
 db.Where("tenant_id = ?", tenantID).Find(&uas)
 
 for _, ua := range uas {

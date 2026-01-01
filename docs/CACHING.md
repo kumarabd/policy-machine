@@ -18,21 +18,21 @@ Policy Machine uses a **multi-tier caching system** with different cache types o
 ```
 ┌─────────────────────────────────────────────────────────┐
 │              Decision Cache (60s TTL)                   │
-│  Indexed by: (user, object, operation)                  │
+│  Indexed by: (subject, object, operation)                  │
 │  Fastest path: 1-10μs                                   │
 └─────────────────────────────────────────────────────────┘
                       │ (miss)
                       ▼
 ┌─────────────────────────────────────────────────────────┐
 │        Operation Caches (2min TTL)                      │
-│  • Allow Cache: (user, operation) → OA bitmap            │
-│  • Deny Cache: (user, operation) → OA bitmap             │
+│  • Allow Cache: (subject, operation) → OA bitmap            │
+│  • Deny Cache: (subject, operation) → OA bitmap             │
 └─────────────────────────────────────────────────────────┘
                       │ (miss)
                       ▼
 ┌─────────────────────────────────────────────────────────┐
 │        Closure Caches (2-10min TTL)                     │
-│  • UA Closure: user → UA bitmap                         │
+│  • UA Closure: subject → UA bitmap                         │
 │  • OA Closure: object → OA bitmap                      │
 │  • Node Closures: UA/OA node → ancestors/descendants   │
 └─────────────────────────────────────────────────────────┘
@@ -53,10 +53,10 @@ Policy Machine uses a **multi-tier caching system** with different cache types o
 **Implementation**: `indexedDecisionCache` (`pkg/engine/decision_cache.go`)
 
 **Key Features**:
-- **Indexed by user, object, operation**
+- **Indexed by subject, object, operation**
 - **TTL**: 60 seconds
 - **Revision validation**: Invalidated on policy changes
-- **Fast invalidation**: Can delete by user, object, or (user, operation)
+- **Fast invalidation**: Can delete by subject, object, or (subject, operation)
 
 **Structure**:
 ```go
@@ -64,19 +64,19 @@ type indexedDecisionCache struct {
     ttl time.Duration
     
     entries  map[decisionKey]decisionEntry
-    byUser   map[uuid.UUID]keySet      // Index for user-based invalidation
+    bySubject   map[uuid.UUID]keySet      // Index for subject-based invalidation
     byObject map[uuid.UUID]keySet      // Index for object-based invalidation
-    byUserOp map[uuid.UUID]map[string]keySet  // Index for (user, op) invalidation
+    bySubjectOp map[uuid.UUID]map[string]keySet  // Index for (subject, op) invalidation
 }
 ```
 
 **Access Pattern**:
 ```go
 // Get decision
-allowed, ok := cache.Get(userID, objectID, op, snapshotVersion)
+allowed, ok := cache.Get(subjectID, objectID, op, snapshotVersion)
 
 // Put decision
-cache.Put(userID, objectID, op, allowed, snapshotVersion)
+cache.Put(subjectID, objectID, op, allowed, snapshotVersion)
 ```
 
 **Performance**:
@@ -85,21 +85,21 @@ cache.Put(userID, objectID, op, allowed, snapshotVersion)
 
 ### 2. Closure Caches
 
-#### User UA Closure Cache
+#### Subject UA Closure Cache
 
-**Purpose**: Cache the set of all UAs reachable from a user.
+**Purpose**: Cache the set of all UAs reachable from a subject.
 
 **Implementation**: `closureCache[uuid.UUID]` (`pkg/engine/closure_cache.go`)
 
 **TTL**: 2 minutes
 
-**Key**: User UUID
+**Key**: Subject UUID
 
 **Value**: Roaring Bitmap of UA indices
 
 **Usage**:
 ```go
-uaClosure := e.userUAClosure(snapshot, userID)
+uaClosure := e.subjectUAClosure(snapshot, subjectID)
 // Returns cached bitmap if available, otherwise computes and caches
 ```
 
@@ -143,13 +143,13 @@ descendants := e.oaNodeDescendants(snapshot, oaIdx)
 
 #### Allow Cache
 
-**Purpose**: Cache the set of OAs a user can access for an operation.
+**Purpose**: Cache the set of OAs a subject can access for an operation.
 
-**Implementation**: `userOpBitmapCache` (`pkg/engine/userop_cache.go`)
+**Implementation**: `subjectOpBitmapCache` (`pkg/engine/subjectop_cache.go`)
 
 **TTL**: 2 minutes
 
-**Key**: (User UUID, Operation string)
+**Key**: (Subject UUID, Operation string)
 
 **Value**: Roaring Bitmap of OA indices
 
@@ -157,18 +157,18 @@ descendants := e.oaNodeDescendants(snapshot, oaIdx)
 
 **Usage**:
 ```go
-allowed := e.allowedFor(snapshot, userID, op, uaClosure)
+allowed := e.allowedFor(snapshot, subjectID, op, uaClosure)
 ```
 
 #### Deny Cache
 
-**Purpose**: Cache the set of OAs a user is prohibited from accessing for an operation.
+**Purpose**: Cache the set of OAs a subject is prohibited from accessing for an operation.
 
-**Implementation**: `userOpBitmapCache`
+**Implementation**: `subjectOpBitmapCache`
 
 **TTL**: 2 minutes
 
-**Key**: (User UUID, Operation string)
+**Key**: (Subject UUID, Operation string)
 
 **Value**: Roaring Bitmap of OA indices
 
@@ -176,7 +176,7 @@ allowed := e.allowedFor(snapshot, userID, op, uaClosure)
 
 **Usage**:
 ```go
-denied := e.deniedFor(snapshot, userID, op, uaClosure)
+denied := e.deniedFor(snapshot, subjectID, op, uaClosure)
 ```
 
 ## Cache Invalidation
@@ -185,32 +185,32 @@ denied := e.deniedFor(snapshot, userID, op, uaClosure)
 
 Policy Machine uses **granular cache invalidation** to minimize cache misses while ensuring correctness:
 
-1. **Compute affected entities**: Determine which users, objects, and operations are affected by a policy change
+1. **Compute affected entities**: Determine which subjects, objects, and operations are affected by a policy change
 2. **Invalidate selectively**: Only delete cache entries that are actually affected
 3. **Preserve unaffected entries**: Keep cache entries that remain valid
 
 ### Invalidation Types
 
-#### 1. User UA Closure Invalidation
+#### 1. Subject UA Closure Invalidation
 
 **Triggered by**:
-- User → UA assignment changes
-- UA → UA hierarchy changes (affects all users in subtree)
+- Subject → UA assignment changes
+- UA → UA hierarchy changes (affects all subjects in subtree)
 
 **Action**:
-- Delete user's UA closure cache entry
-- Delete user's allow/deny cache entries (all operations)
-- Delete user's decision cache entries
+- Delete subject's UA closure cache entry
+- Delete subject's allow/deny cache entries (all operations)
+- Delete subject's decision cache entries
 
 **Example**:
 ```go
-// User assigned to new UA
-inv.usersUAClosure[userID] = struct{}{}
+// Subject assigned to new UA
+inv.subjectsUAClosure[subjectID] = struct{}{}
 // Later in applyInvalidations:
-e.uaCache.Delete(userID)
-e.allowCache.DeleteUser(userID)
-e.denyCache.DeleteUser(userID)
-e.decisions.DeleteUser(userID)
+e.uaCache.Delete(subjectID)
+e.allowCache.DeleteSubject(subjectID)
+e.denyCache.DeleteSubject(subjectID)
+e.decisions.DeleteSubject(subjectID)
 ```
 
 #### 2. Object OA Closure Invalidation
@@ -239,17 +239,17 @@ e.decisions.DeleteObject(objectID)
 - Prohibition changes (affects deny cache)
 
 **Action**:
-- Delete specific (user, operation) cache entries
+- Delete specific (subject, operation) cache entries
 - Delete affected decision cache entries
 
 **Example**:
 ```go
 // Association added for UA
-for user in UA.subtree:
-    inv.userAllowOp[user][op] = struct{}{}
+for subject in UA.subtree:
+    inv.subjectAllowOp[subject][op] = struct{}{}
 // Later:
-e.allowCache.DeleteUserOp(user, op)
-e.decisions.DeleteUserOp(user, op)
+e.allowCache.DeleteSubjectOp(subject, op)
+e.decisions.DeleteSubjectOp(subject, op)
 ```
 
 #### 4. Node Closure Invalidation
@@ -260,7 +260,7 @@ e.decisions.DeleteUserOp(user, op)
 
 **Action**:
 - Delete affected node closure cache entries
-- Cascades to user/object closures that depend on these nodes
+- Cascades to subject/object closures that depend on these nodes
 
 **Example**:
 ```go
@@ -279,21 +279,21 @@ The `computeInvalidations` function (`pkg/engine/invalidate.go`) analyzes policy
 func computeInvalidations(inv *invalidation, s *Snapshot, ch postgres.PolicyChange) {
     switch ch.Kind {
     case "ASSIGNMENT_EDGE":
-        // Analyze edge type and determine affected users/objects
+        // Analyze edge type and determine affected subjects/objects
         if childType == USER && parentType == UA {
-            inv.usersUAClosure[childID] = struct{}{}
+            inv.subjectsUAClosure[childID] = struct{}{}
         }
         // ... more cases
         
     case "ASSOC_OP":
         // Association change affects allow cache
-        for user in UA.subtree:
-            inv.addAllow(user, operation)
+        for subject in UA.subtree:
+            inv.addAllow(subject, operation)
             
     case "PROHIB_OP":
         // Prohibition change affects deny cache
-        for user in affected_users:
-            inv.addDeny(user, operation)
+        for subject in affected_subjects:
+            inv.addDeny(subject, operation)
     }
 }
 ```
@@ -309,12 +309,12 @@ func (e *Engine) applyInvalidations(inv *invalidation) {
         e.uaNodeClosure.Delete(uaIdx)
     }
     
-    // 2. Invalidate user closures and derived caches
-    for u := range inv.usersUAClosure {
+    // 2. Invalidate subject closures and derived caches
+    for u := range inv.subjectsUAClosure {
         e.uaCache.Delete(u)
-        e.allowCache.DeleteUser(u)
-        e.denyCache.DeleteUser(u)
-        e.decisions.DeleteUser(u)
+        e.allowCache.DeleteSubject(u)
+        e.denyCache.DeleteSubject(u)
+        e.decisions.DeleteSubject(u)
     }
     
     // 3. Invalidate object closures
@@ -324,10 +324,10 @@ func (e *Engine) applyInvalidations(inv *invalidation) {
     }
     
     // 4. Invalidate operation-specific caches
-    for u, ops := range inv.userAllowOp {
+    for u, ops := range inv.subjectAllowOp {
         for op := range ops {
-            e.allowCache.DeleteUserOp(u, op)
-            e.decisions.DeleteUserOp(u, op)
+            e.allowCache.DeleteSubjectOp(u, op)
+            e.decisions.DeleteSubjectOp(u, op)
         }
     }
     // ... similar for deny
@@ -344,8 +344,8 @@ Configured in `engine.New()` (`pkg/engine/engine.go:48`):
 e := &Engine{
     uaCache:       newClosureCache[uuid.UUID](2 * time.Minute),
     oaCache:       newClosureCache[uuid.UUID](2 * time.Minute),
-    allowCache:    newUserOpBitmapCache(2 * time.Minute),
-    denyCache:     newUserOpBitmapCache(2 * time.Minute),
+    allowCache:    newSubjectOpBitmapCache(2 * time.Minute),
+    denyCache:     newSubjectOpBitmapCache(2 * time.Minute),
     uaNodeClosure: newClosureCache[uint32](10 * time.Minute),
     oaNodeClosure: newClosureCache[uint32](10 * time.Minute),
     oaDescClosure: newClosureCache[uint32](10 * time.Minute),
@@ -389,7 +389,7 @@ Adjust TTLs based on your workload:
 Typical cache hit rates in production:
 
 - **Decision Cache**: 80-95% (most requests are repeated)
-- **Closure Caches**: 60-80% (users/objects accessed multiple times)
+- **Closure Caches**: 60-80% (subjects/objects accessed multiple times)
 - **Node Closures**: 90-99% (graph structure is stable)
 
 ### Latency Impact
@@ -414,7 +414,7 @@ Per cache type (approximate, 10K entities):
 
 | Cache Type | Size | Notes |
 |------------|------|-------|
-| Decision Cache | 1-5 MB | Depends on unique (user, object, op) combinations |
+| Decision Cache | 1-5 MB | Depends on unique (subject, object, op) combinations |
 | Closure Caches | 500 KB - 2 MB | Depends on graph density |
 | Node Closures | 100-500 KB | Relatively stable |
 | Operation Caches | 1-3 MB | Depends on operation diversity |

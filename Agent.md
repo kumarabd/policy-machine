@@ -36,7 +36,7 @@ This document defines coding standards, architectural patterns, and implementati
 
 ```go
 // ✅ Good: Clear, descriptive names
-func (e *Engine) userUAClosure(s *Snapshot, userID uuid.UUID) *roaring.Bitmap {
+func (e *Engine) subjectUAClosure(s *Snapshot, subjectID uuid.UUID) *roaring.Bitmap {
     // ...
 }
 
@@ -133,21 +133,21 @@ func applyChange(s *Snapshot, ch PolicyChange) {
 **Implementation**:
 - Compute affected entities during change application
 - Invalidate specific cache entries, not entire caches
-- Use indexes for fast invalidation (by user, object, operation)
+- Use indexes for fast invalidation (by subject, object, operation)
 
 **Example**:
 ```go
 // ✅ Good: Granular invalidation
-if userAssignedToUA {
-    inv.usersUAClosure[userID] = struct{}{}
-    // Later: Only invalidate this user's caches
-    e.uaCache.Delete(userID)
-    e.decisions.DeleteUser(userID)
+if subjectAssignedToUA {
+    inv.subjectsUAClosure[subjectID] = struct{}{}
+    // Later: Only invalidate this subject's caches
+    e.uaCache.Delete(subjectID)
+    e.decisions.DeleteSubject(subjectID)
 }
 
 // ❌ Bad: Clear entire cache
-if userAssignedToUA {
-    e.uaCache.Clear()  // Invalidates all users
+if subjectAssignedToUA {
+    e.uaCache.Clear()  // Invalidates all subjects
     e.decisions.Clear()  // Invalidates all decisions
 }
 ```
@@ -199,7 +199,7 @@ pkg/
 │   ├── closures.go  # Closure computation
 │   ├── node_closure.go # Node-level traversals
 │   ├── closure_cache.go # Closure cache implementation
-│   ├── userop_cache.go # Operation cache implementation
+│   ├── subjectop_cache.go # Operation cache implementation
 │   ├── decision_cache.go # Decision cache implementation
 │   └── emitter.go   # Obligation/event emission
 ├── postgres/        # Database layer
@@ -314,15 +314,15 @@ func (e *Engine) Snapshot() *Snapshot {
 
 **Example**:
 ```go
-func TestUserUAClosure(t *testing.T) {
+func TestSubjectUAClosure(t *testing.T) {
     tests := []struct {
         name     string
-        userID   uuid.UUID
+        subjectID   uuid.UUID
         expected []uint32
     }{
         {
-            name:     "user with single UA",
-            userID:   user1,
+            name:     "subject with single UA",
+            subjectID:   subject1,
             expected: []uint32{0, 1},
         },
         // ... more cases
@@ -354,13 +354,13 @@ func TestUserUAClosure(t *testing.T) {
 
 **Example**:
 ```go
-// userUAClosure returns the set of all User Attributes (UAs) reachable
-// from the given user via assignment edges. The result includes the user's
+// subjectUAClosure returns the set of all Subject Attributes (UAs) reachable
+// from the given subject via assignment edges. The result includes the subject's
 // direct UA assignments and all ancestor UAs (transitive closure).
 //
 // The closure is cached with a TTL of 2 minutes. If the cache is empty
 // or expired, the closure is computed via BFS traversal of the UA graph.
-func (e *Engine) userUAClosure(s *Snapshot, userID uuid.UUID) *roaring.Bitmap {
+func (e *Engine) subjectUAClosure(s *Snapshot, subjectID uuid.UUID) *roaring.Bitmap {
     // ...
 }
 ```
@@ -420,7 +420,7 @@ db.Find(&changes)  // Scans entire table
 
 ## Security Considerations
 
-1. **Input Validation**: Validate all user inputs
+1. **Input Validation**: Validate all subject inputs
 2. **SQL Injection**: Use parameterized queries (GORM handles this)
 3. **Tenant Isolation**: Never leak data across tenants
 4. **Authorization**: Validate permissions before policy changes
@@ -438,7 +438,7 @@ db.Find(&changes)  // Scans entire table
 
 1. **Version Bumping**: Bump major version for breaking changes
 2. **Deprecation Period**: Deprecate old APIs before removal
-3. **Migration Guide**: Provide migration guide for users
+3. **Migration Guide**: Provide migration guide for subjects
 4. **Communication**: Clearly communicate breaking changes
 
 ## Code Review Checklist

@@ -330,7 +330,7 @@ func (s *Server) DeleteSubject(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// ListSubjectGroups returns paginated list of subject sets
+// ListSubjectSets returns paginated list of subject sets
 // @Summary List subject sets
 // @Description Returns paginated list of subject sets (UAs)
 // @Tags subject-sets
@@ -340,9 +340,9 @@ func (s *Server) DeleteSubject(w http.ResponseWriter, r *http.Request) {
 // @Param cursor query string false "Pagination cursor"
 // @Success 200 {object} SearchResponse
 // @Router /api/v1/subject-sets [get]
-func (s *Server) ListSubjectGroups(w http.ResponseWriter, r *http.Request) {
+func (s *Server) ListSubjectSets(w http.ResponseWriter, r *http.Request) {
 	if httputil.IsMockMode(r.Context()) {
-		mock.ListSubjectGroups(w, r)
+		mock.ListSubjectSets(w, r)
 		return
 	}
 
@@ -403,18 +403,18 @@ func (s *Server) ListSubjectGroups(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(response)
 }
 
-// CreateSubjectGroup creates a new subject set
+// CreateSubjectSet creates a new subject set
 // @Summary Create subject set
 // @Description Creates a new subject set (UA)
 // @Tags subject-sets
 // @Accept json
 // @Produce json
-// @Param request body CreateSubjectGroupRequest true "Set data"
-// @Success 201 {object} api.SubjectGroupResponse
+// @Param request body CreateSubjectSetRequest true "Set data"
+// @Success 201 {object} api.SubjectSetResponse
 // @Router /api/v1/subject-sets [post]
-func (s *Server) CreateSubjectGroup(w http.ResponseWriter, r *http.Request) {
+func (s *Server) CreateSubjectSet(w http.ResponseWriter, r *http.Request) {
 	if httputil.IsMockMode(r.Context()) {
-		mock.CreateSubjectGroup(w, r)
+		mock.CreateSubjectSet(w, r)
 		return
 	}
 
@@ -435,7 +435,7 @@ func (s *Server) CreateSubjectGroup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ua := &postgres.UserAttribute{
+	ua := &postgres.SubjectAttribute{
 		Name: req.Name,
 	}
 
@@ -445,7 +445,7 @@ func (s *Server) CreateSubjectGroup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	response := api.SubjectGroupResponse{
+	response := api.SubjectSetResponse{
 		Group: api.SubjectSet{
 			ID:        ua.ID,
 			Name:      ua.Name,
@@ -459,7 +459,7 @@ func (s *Server) CreateSubjectGroup(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(response)
 }
 
-// GetSubjectGroup returns a subject set by ID
+// GetSubjectSet returns a subject set by ID
 // @Summary Get subject set
 // @Description Returns a subject set by ID
 // @Tags subject-sets
@@ -467,9 +467,9 @@ func (s *Server) CreateSubjectGroup(w http.ResponseWriter, r *http.Request) {
 // @Param id path string true "Set ID"
 // @Success 200 {object} api.SubjectSet
 // @Router /api/v1/subject-sets/{id} [get]
-func (s *Server) GetSubjectGroup(w http.ResponseWriter, r *http.Request) {
+func (s *Server) GetSubjectSet(w http.ResponseWriter, r *http.Request) {
 	if httputil.IsMockMode(r.Context()) {
-		mock.GetSubjectGroup(w, r)
+		mock.GetSubjectSet(w, r)
 		return
 	}
 
@@ -518,19 +518,19 @@ func (s *Server) GetSubjectGroup(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(group)
 }
 
-// UpdateSubjectGroup updates a subject set
+// UpdateSubjectSet updates a subject set
 // @Summary Update subject set
 // @Description Updates a subject set
 // @Tags subject-sets
 // @Accept json
 // @Produce json
 // @Param id path string true "Set ID"
-// @Param request body UpdateSubjectGroupRequest true "Update data"
-// @Success 200 {object} api.SubjectGroupResponse
+// @Param request body UpdateSubjectSetRequest true "Update data"
+// @Success 200 {object} api.SubjectSetResponse
 // @Router /api/v1/subject-sets/{id} [patch]
-func (s *Server) UpdateSubjectGroup(w http.ResponseWriter, r *http.Request) {
+func (s *Server) UpdateSubjectSet(w http.ResponseWriter, r *http.Request) {
 	if httputil.IsMockMode(r.Context()) {
-		mock.UpdateSubjectGroup(w, r)
+		mock.UpdateSubjectSet(w, r)
 		return
 	}
 
@@ -568,9 +568,9 @@ func (s *Server) UpdateSubjectGroup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ua, _ := s.engine.GetDB().GetSubjectGroup(r.Context(), tenantID, id)
+	ua, _ := s.engine.GetDB().GetSubjectSet(r.Context(), tenantID, id)
 
-	response := api.SubjectGroupResponse{
+	response := api.SubjectSetResponse{
 		Group: api.SubjectSet{
 			ID:        ua.ID,
 			Name:      ua.Name,
@@ -583,16 +583,16 @@ func (s *Server) UpdateSubjectGroup(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(response)
 }
 
-// DeleteSubjectGroup deletes a subject set
+// DeleteSubjectSet deletes a subject set
 // @Summary Delete subject set
 // @Description Deletes a subject set
 // @Tags subject-sets
 // @Param id path string true "Set ID"
 // @Success 204 "No Content"
 // @Router /api/v1/subject-sets/{id} [delete]
-func (s *Server) DeleteSubjectGroup(w http.ResponseWriter, r *http.Request) {
+func (s *Server) DeleteSubjectSet(w http.ResponseWriter, r *http.Request) {
 	if httputil.IsMockMode(r.Context()) {
-		mock.DeleteSubjectGroup(w, r)
+		mock.DeleteSubjectSet(w, r)
 		return
 	}
 
@@ -605,7 +605,7 @@ func (s *Server) DeleteSubjectGroup(w http.ResponseWriter, r *http.Request) {
 	idStr := chi.URLParam(r, "id")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
-		httputil.RespondError(w, http.StatusBadRequest, "INVALID_ID", "Invalid group ID")
+		httputil.RespondError(w, http.StatusBadRequest, "INVALID_ID", "Invalid subject set ID")
 		return
 	}
 

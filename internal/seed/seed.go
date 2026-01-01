@@ -26,7 +26,7 @@ func Seed(ctx context.Context, db *postgres.Handler, tenantID string) error {
 		}
 	}
 
-	// Seed subject sets (UserAttributes)
+	// Seed subject sets (SubjectAttributes)
 	for _, ua := range data.SubjectSets {
 		if _, err := db.CreateSubjectSet(ctx, tenantID, &ua); err != nil {
 			return fmt.Errorf("failed to create subject set %s: %w", ua.Name, err)
