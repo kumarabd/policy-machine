@@ -9,7 +9,6 @@ import (
 	"github.com/RoaringBitmap/roaring"
 	"github.com/google/uuid"
 	httputil "github.com/kumarabd/policy-machine/internal/http"
-	"github.com/kumarabd/policy-machine/internal/mock"
 	"github.com/kumarabd/policy-machine/pkg/api"
 )
 
@@ -23,11 +22,6 @@ import (
 // @Success 200 {object} http.AuthorizeResponse
 // @Router /api/v1/authorize [post]
 func (s *Server) Authorize(w http.ResponseWriter, r *http.Request) {
-	if httputil.IsMockMode(r.Context()) {
-		mock.Authorize(w, r)
-		return
-	}
-
 	tenantID, ok := httputil.GetTenantID(r.Context())
 	if !ok {
 		httputil.RespondError(w, http.StatusBadRequest, "MISSING_TENANT", "Tenant ID required")
@@ -60,11 +54,6 @@ func (s *Server) Authorize(w http.ResponseWriter, r *http.Request) {
 
 // AuthorizeExplain provides detailed explanation of authorization decision
 func (s *Server) AuthorizeExplain(w http.ResponseWriter, r *http.Request) {
-	if httputil.IsMockMode(r.Context()) {
-		mock.AuthorizeExplain(w, r)
-		return
-	}
-
 	tenantID, ok := httputil.GetTenantID(r.Context())
 	if !ok {
 		httputil.RespondError(w, http.StatusBadRequest, "MISSING_TENANT", "Tenant ID required")
@@ -150,11 +139,6 @@ func (s *Server) AuthorizeExplain(w http.ResponseWriter, r *http.Request) {
 // @Success 200 {object} api.EvaluateResponse
 // @Router /api/v1/evaluate [post]
 func (s *Server) Evaluate(w http.ResponseWriter, r *http.Request) {
-	if httputil.IsMockMode(r.Context()) {
-		mock.Evaluate(w, r)
-		return
-	}
-
 	tenantID, ok := httputil.GetTenantID(r.Context())
 	if !ok {
 		httputil.RespondError(w, http.StatusBadRequest, "MISSING_TENANT", "Tenant ID required")

@@ -82,8 +82,6 @@ func New(opts *Options) (*Handler, error) {
 		&Subject{},
 		&Object{},
 		&PolicyClass{},
-		&SubjectSet{},
-		&ObjectSet{},
 		&SubjectAttribute{},
 		&ObjectAttribute{},
 		&AssignmentEdge{},
@@ -124,10 +122,13 @@ func New(opts *Options) (*Handler, error) {
 
 		// Objects uniqueness per tenant
 		`CREATE UNIQUE INDEX IF NOT EXISTS uidx_objects_tenant_external ON objects (tenant_id, external_id);`,
+		`CREATE INDEX IF NOT EXISTS idx_objects_tenant_attribute_type ON objects (tenant_id, attribute_type);`,
 
 		// UA/OA/PC unique names per tenant
 		`CREATE UNIQUE INDEX IF NOT EXISTS uidx_ua_tenant_name ON subject_attributes (tenant_id, name);`,
+		`CREATE INDEX IF NOT EXISTS idx_ua_type ON subject_attributes (tenant_id, attribute_type);`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS uidx_oa_tenant_name ON object_attributes (tenant_id, name);`,
+		`CREATE INDEX IF NOT EXISTS idx_oa_type ON object_attributes (tenant_id, attribute_type);`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS uidx_pc_tenant_name ON policy_classes (tenant_id, name);`,
 
 		// Assignment edge uniqueness

@@ -9,7 +9,6 @@ engine:
   tenant_id: "default"  # Default tenant ID (required, can be any string)
   max_traversal_nodes: 100000  # Maximum nodes to traverse in BFS operations (default: 100000)
   cache_ttl: 2m  # Default TTL for most caches (default: 2 minutes, format: Go duration string)
-  mock_mode: false  # Enable mock mode for API responses
   limits:
     # Cache capacity limits (zero = use defaults)
     # UA/OA closure caches: default 50,000 entries

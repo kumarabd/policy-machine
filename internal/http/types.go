@@ -18,12 +18,12 @@ type (
 	CreateObjectRequest       = api.CreateObjectRequest
 	UpdateObjectRequest       = api.UpdateObjectRequest
 	ObjectResponse            = api.ObjectResponse
-	CreateSubjectSetRequest   = api.CreateSubjectSetRequest
-	UpdateSubjectSetRequest   = api.UpdateSubjectSetRequest
-	SubjectSetResponse        = api.SubjectSetResponse
-	CreateObjectSetRequest    = api.CreateObjectSetRequest
-	UpdateObjectSetRequest    = api.UpdateObjectSetRequest
-	ObjectSetResponse         = api.ObjectSetResponse
+	CreateSubjectAttributeRequest   = api.CreateSubjectAttributeRequest
+	UpdateSubjectAttributeRequest   = api.UpdateSubjectAttributeRequest
+	SubjectAttributeResponse        = api.SubjectAttributeResponse
+	CreateObjectAttributeRequest    = api.CreateObjectAttributeRequest
+	UpdateObjectAttributeRequest    = api.UpdateObjectAttributeRequest
+	ObjectAttributeResponse         = api.ObjectAttributeResponse
 	CreateRelationshipRequest = api.CreateRelationshipRequest
 	DeleteRelationshipRequest = api.DeleteRelationshipRequest
 	RelationshipResponse      = api.RelationshipResponse
@@ -39,8 +39,8 @@ type (
 	// Entity types
 	Subject      = api.Subject
 	Object       = api.Object
-	SubjectSet   = api.SubjectSet
-	ObjectSet    = api.ObjectSet
+	SubjectAttribute   = api.SubjectAttribute
+	ObjectAttribute    = api.ObjectAttribute
 	Relationship = api.Relationship
 	Rule         = api.Rule
 	Deny         = api.Deny
@@ -52,8 +52,8 @@ type (
 	// Response types
 	ListSubjectsResponse      = api.ListSubjectsResponse
 	ListObjectsResponse       = api.ListObjectsResponse
-	ListSubjectSetsResponse   = api.ListSubjectSetsResponse
-	ListObjectSetsResponse    = api.ListObjectSetsResponse
+	ListSubjectAttributesResponse   = api.ListSubjectAttributesResponse
+	ListObjectAttributesResponse    = api.ListObjectAttributesResponse
 	ListRelationshipsResponse = api.ListRelationshipsResponse
 	ListRulesResponse         = api.ListRulesResponse
 	ListDeniesResponse        = api.ListDeniesResponse

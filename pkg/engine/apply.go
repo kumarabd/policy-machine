@@ -26,14 +26,22 @@ func applyChange(s *Snapshot, ch postgres.PolicyChange) error {
 
 	case "ASSOC_OP":
 		var p struct {
-			SubjectAttributeID uuid.UUID `json:"ua_id"`
-			ObjectAttributeID  uuid.UUID `json:"oa_id"`
-			Operation          string    `json:"op"`
+			SubjectType string    `json:"subject_type"`
+			SubjectID   uuid.UUID `json:"subject_id"`
+			ObjectType  string    `json:"object_type"`
+			ObjectID    uuid.UUID `json:"object_id"`
+			Operation   string    `json:"op"`
 		}
 		if err := json.Unmarshal(ch.Payload, &p); err != nil {
 			return err
 		}
-		return applyAssocOp(s, ch.Op, p.SubjectAttributeID, p.ObjectAttributeID, p.Operation)
+		// Engine currently only supports UA->OA associations
+		// Note: "subject-set" and "object-set" are API terminology only for the subject-sets/object-sets endpoints.
+		// In rules API, we use "subject-attribute" and "object-attribute" to refer to the actual entities.
+		if p.SubjectType != "subject-attribute" || p.ObjectType != "object-attribute" {
+			return nil // Skip non-UA->OA associations
+		}
+		return applyAssocOp(s, ch.Op, p.SubjectID, p.ObjectID, p.Operation)
 
 	case "PROHIB_OP":
 		var p struct {

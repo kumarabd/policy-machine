@@ -7,7 +7,6 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	httputil "github.com/kumarabd/policy-machine/internal/http"
-	"github.com/kumarabd/policy-machine/internal/mock"
 	"github.com/kumarabd/policy-machine/pkg/api"
 )
 
@@ -20,10 +19,6 @@ import (
 // @Success 200 {object} VersionDiff
 // @Router /api/v1/versions/{id}/diff [get]
 func (s *Server) GetVersionDiff(w http.ResponseWriter, r *http.Request) {
-	if httputil.IsMockMode(r.Context()) {
-		mock.GetVersionDiff(w, r)
-		return
-	}
 
 	tenantID, ok := httputil.GetTenantID(r.Context())
 	if !ok {
@@ -93,10 +88,6 @@ func (s *Server) GetVersionDiff(w http.ResponseWriter, r *http.Request) {
 // @Success 200 {object} PolicySnapshot
 // @Router /api/v1/versions/{id}/snapshot [get]
 func (s *Server) GetVersionSnapshot(w http.ResponseWriter, r *http.Request) {
-	if httputil.IsMockMode(r.Context()) {
-		mock.GetVersionSnapshot(w, r)
-		return
-	}
 
 	tenantID, ok := httputil.GetTenantID(r.Context())
 	if !ok {

@@ -9,17 +9,12 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	httputil "github.com/kumarabd/policy-machine/internal/http"
-	"github.com/kumarabd/policy-machine/internal/mock"
 	"github.com/kumarabd/policy-machine/pkg/api"
 	"gorm.io/gorm"
 )
 
 // ListRules returns paginated list of rules (associations)
 func (s *Server) ListRules(w http.ResponseWriter, r *http.Request) {
-	if httputil.IsMockMode(r.Context()) {
-		mock.ListRules(w, r)
-		return
-	}
 
 	tenantID, ok := httputil.GetTenantID(r.Context())
 	if !ok {
@@ -56,27 +51,42 @@ func (s *Server) ListRules(w http.ResponseWriter, r *http.Request) {
 	rules := make([]api.Rule, len(results))
 	for i, res := range results {
 		ops, _ := res["operations"].([]string)
-		uaID := res["ua_id"].(uuid.UUID)
-		oaID := res["oa_id"].(uuid.UUID)
 
-		// Generate a name from the scopes if not available
-		name := "Rule"
-		if desc, ok := res["description"].(string); ok && desc != "" {
-			name = desc
+		// Get subject type and ID - must be present in response
+		subjectType, ok := res["subject_type"].(string)
+		if !ok {
+			httputil.RespondError(w, http.StatusInternalServerError, "DATA_ERROR", "Missing subject_type in rule response")
+			return
+		}
+		subjectID, ok := res["subject_id"].(uuid.UUID)
+		if !ok {
+			httputil.RespondError(w, http.StatusInternalServerError, "DATA_ERROR", "Missing subject_id in rule response")
+			return
+		}
+
+		// Get object type and ID - must be present in response
+		objectType, ok := res["object_type"].(string)
+		if !ok {
+			httputil.RespondError(w, http.StatusInternalServerError, "DATA_ERROR", "Missing object_type in rule response")
+			return
+		}
+		objectID, ok := res["object_id"].(uuid.UUID)
+		if !ok {
+			httputil.RespondError(w, http.StatusInternalServerError, "DATA_ERROR", "Missing object_id in rule response")
+			return
 		}
 
 		rules[i] = api.Rule{
 			ID:          res["id"].(uuid.UUID),
-			Name:        name,
 			Description: "",
 			Actions:     ops,
 			SubjectSelector: api.NodeRef{
-				Type: "subject-set",
-				ID:   uaID,
+				Type: subjectType,
+				ID:   subjectID,
 			},
 			ObjectSelector: api.NodeRef{
-				Type: "object-set",
-				ID:   oaID,
+				Type: objectType,
+				ID:   objectID,
 			},
 			Effect:  "ALLOW",
 			Enabled: true,
@@ -104,10 +114,6 @@ func (s *Server) ListRules(w http.ResponseWriter, r *http.Request) {
 
 // CreateRule creates a new rule (association)
 func (s *Server) CreateRule(w http.ResponseWriter, r *http.Request) {
-	if httputil.IsMockMode(r.Context()) {
-		mock.CreateRule(w, r)
-		return
-	}
 
 	tenantID, ok := httputil.GetTenantID(r.Context())
 	if !ok {
@@ -121,12 +127,18 @@ func (s *Server) CreateRule(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.SubjectSelector.Type != "subject-set" {
-		httputil.RespondError(w, http.StatusBadRequest, "VALIDATION_ERROR", "subject_selector.type must be 'subject-set'")
+	// Validate subject selector type
+	// Note: "subject-set" is API terminology only for the /api/v1/subject-sets endpoint.
+	// In rules API, we use "subject-attribute" to refer to SubjectAttribute (UA) entities.
+	if req.SubjectSelector.Type != "subject" && req.SubjectSelector.Type != "subject-attribute" {
+		httputil.RespondError(w, http.StatusBadRequest, "VALIDATION_ERROR", "subject_selector.type must be 'subject' or 'subject-attribute'")
 		return
 	}
-	if req.ObjectSelector.Type != "object-set" {
-		httputil.RespondError(w, http.StatusBadRequest, "VALIDATION_ERROR", "object_selector.type must be 'object-set'")
+	// Validate object selector type
+	// Note: "object-set" is API terminology only for the /api/v1/object-sets endpoint.
+	// In rules API, we use "object-attribute" to refer to ObjectAttribute (OA) entities.
+	if req.ObjectSelector.Type != "object" && req.ObjectSelector.Type != "object-attribute" {
+		httputil.RespondError(w, http.StatusBadRequest, "VALIDATION_ERROR", "object_selector.type must be 'object' or 'object-attribute'")
 		return
 	}
 	if len(req.Actions) == 0 {
@@ -134,7 +146,7 @@ func (s *Server) CreateRule(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	assocID, revision, err := s.engine.GetDB().CreateRule(r.Context(), tenantID, req.SubjectSelector.ID, req.ObjectSelector.ID, req.Actions)
+	assocID, revision, err := s.engine.GetDB().CreateRule(r.Context(), tenantID, req.SubjectSelector.Type, req.SubjectSelector.ID, req.ObjectSelector.Type, req.ObjectSelector.ID, req.Actions)
 	if err != nil {
 		httputil.RespondError(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return
@@ -144,7 +156,6 @@ func (s *Server) CreateRule(w http.ResponseWriter, r *http.Request) {
 	response := api.RuleResponse{
 		Rule: api.Rule{
 			ID:              assocID,
-			Name:            req.Name,
 			Description:     req.Description,
 			ScopeID:         req.ScopeID,
 			Actions:         req.Actions,
@@ -166,10 +177,6 @@ func (s *Server) CreateRule(w http.ResponseWriter, r *http.Request) {
 
 // GetRule returns a rule by ID
 func (s *Server) GetRule(w http.ResponseWriter, r *http.Request) {
-	if httputil.IsMockMode(r.Context()) {
-		mock.GetRule(w, r)
-		return
-	}
 
 	tenantID, ok := httputil.GetTenantID(r.Context())
 	if !ok {
@@ -194,18 +201,20 @@ func (s *Server) GetRule(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	subjectType, subjectID := assoc.GetSubjectType()
+	objectType, objectID := assoc.GetObjectType()
+
 	rule := api.Rule{
 		ID:          assoc.ID,
-		Name:        "Rule", // TODO: Get from DB if available
 		Description: "",
 		Actions:     ops,
 		SubjectSelector: api.NodeRef{
-			Type: "subject-set",
-			ID:   assoc.SubjectAttributeID,
+			Type: subjectType,
+			ID:   subjectID,
 		},
 		ObjectSelector: api.NodeRef{
-			Type: "object-set",
-			ID:   assoc.ObjectAttributeID,
+			Type: objectType,
+			ID:   objectID,
 		},
 		Effect:    "ALLOW",
 		Enabled:   true,
@@ -218,10 +227,6 @@ func (s *Server) GetRule(w http.ResponseWriter, r *http.Request) {
 
 // UpdateRule updates a rule
 func (s *Server) UpdateRule(w http.ResponseWriter, r *http.Request) {
-	if httputil.IsMockMode(r.Context()) {
-		mock.UpdateRule(w, r)
-		return
-	}
 
 	tenantID, ok := httputil.GetTenantID(r.Context())
 	if !ok {
@@ -262,19 +267,21 @@ func (s *Server) UpdateRule(w http.ResponseWriter, r *http.Request) {
 	assoc, ops, _ := s.engine.GetDB().GetRule(r.Context(), tenantID, id)
 	now := time.Now()
 
+	subjectType, subjectID := assoc.GetSubjectType()
+	objectType, objectID := assoc.GetObjectType()
+
 	response := api.RuleResponse{
 		Rule: api.Rule{
 			ID:          assoc.ID,
-			Name:        "Rule", // TODO: Get from DB if available
 			Description: "",
 			Actions:     ops,
 			SubjectSelector: api.NodeRef{
-				Type: "subject-set",
-				ID:   assoc.SubjectAttributeID,
+				Type: subjectType,
+				ID:   subjectID,
 			},
 			ObjectSelector: api.NodeRef{
-				Type: "object-set",
-				ID:   assoc.ObjectAttributeID,
+				Type: objectType,
+				ID:   objectID,
 			},
 			Effect:    "ALLOW",
 			Enabled:   true,
@@ -290,10 +297,6 @@ func (s *Server) UpdateRule(w http.ResponseWriter, r *http.Request) {
 
 // DeleteRule deletes a rule
 func (s *Server) DeleteRule(w http.ResponseWriter, r *http.Request) {
-	if httputil.IsMockMode(r.Context()) {
-		mock.DeleteRule(w, r)
-		return
-	}
 
 	tenantID, ok := httputil.GetTenantID(r.Context())
 	if !ok {

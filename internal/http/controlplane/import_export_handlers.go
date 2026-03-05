@@ -6,18 +6,15 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/kumarabd/policy-machine/internal/api/mapper"
 	httputil "github.com/kumarabd/policy-machine/internal/http"
-	"github.com/kumarabd/policy-machine/internal/mock"
 	"github.com/kumarabd/policy-machine/internal/postgres"
 	"github.com/kumarabd/policy-machine/pkg/api"
+	"gorm.io/datatypes"
 )
 
 // ExportPolicy exports the entire policy as a bundle
 func (s *Server) ExportPolicy(w http.ResponseWriter, r *http.Request) {
-	if httputil.IsMockMode(r.Context()) {
-		mock.ExportPolicy(w, r)
-		return
-	}
 
 	tenantID, ok := httputil.GetTenantID(r.Context())
 	if !ok {
@@ -26,52 +23,33 @@ func (s *Server) ExportPolicy(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get all entities
-	subjects, _, _, _ := s.engine.GetDB().ListSubjects(r.Context(), tenantID, "", 10000, "")
+	subjects, _, _, _ := s.engine.GetDB().ListSubjects(r.Context(), tenantID, "", 10000, "", nil)
 	uas, _, _, _ := s.engine.GetDB().ListSubjectSets(r.Context(), tenantID, "", 10000, "")
-	objects, _, _, _ := s.engine.GetDB().ListObjects(r.Context(), tenantID, "", 10000, "")
+	objects, _, _, _ := s.engine.GetDB().ListObjects(r.Context(), tenantID, "", 10000, "", nil)
 	oas, _, _, _ := s.engine.GetDB().ListObjectSets(r.Context(), tenantID, "", 10000, "")
 	edges, _, _, _ := s.engine.GetDB().ListRelationships(r.Context(), tenantID, map[string]interface{}{}, 10000, "")
 	_, assocs, _, _, _ := s.engine.GetDB().ListRules(r.Context(), tenantID, map[string]interface{}{}, 10000, "")
 	_, prohs, _, _, _ := s.engine.GetDB().ListDenies(r.Context(), tenantID, map[string]interface{}{}, 10000, "")
 
-	// Convert to API models
-	subjectModels := make([]httputil.Subject, len(subjects))
-	for i, s := range subjects {
-		subjectModels[i] = api.Subject{
-			ID:         s.ID,
-			ExternalID: s.ExternalID,
-			Email:      s.Email,
-			Display:    s.Display,
-			CreatedAt:  s.CreatedAt,
-		}
+	// Convert to API models via mapper
+	subjectModels := make([]api.Subject, len(subjects))
+	for i := range subjects {
+		subjectModels[i] = mapper.Subject(&subjects[i])
 	}
 
-	subjectSets := make([]api.SubjectSet, len(uas))
-	for i, ua := range uas {
-		subjectSets[i] = api.SubjectSet{
-			ID:        ua.ID,
-			Name:      ua.Name,
-			CreatedAt: ua.CreatedAt,
-		}
+	subjectAttributes := make([]api.SubjectAttribute, len(uas))
+	for i := range uas {
+		subjectAttributes[i] = mapper.SubjectAttribute(&uas[i])
 	}
 
-	objs := make([]httputil.Object, len(objects))
-	for i, o := range objects {
-		objs[i] = api.Object{
-			ID:         o.ID,
-			ExternalID: o.ExternalID,
-			Type:       o.Type,
-			CreatedAt:  o.CreatedAt,
-		}
+	objs := make([]api.Object, len(objects))
+	for i := range objects {
+		objs[i] = mapper.Object(&objects[i])
 	}
 
-	objectSets := make([]httputil.ObjectSet, len(oas))
-	for i, oa := range oas {
-		objectSets[i] = api.ObjectSet{
-			ID:        oa.ID,
-			Name:      oa.Name,
-			CreatedAt: oa.CreatedAt,
-		}
+	objectAttributes := make([]api.ObjectAttribute, len(oas))
+	for i := range oas {
+		objectAttributes[i] = mapper.ObjectAttribute(&oas[i])
 	}
 
 	relationships := make([]httputil.Relationship, len(edges))
@@ -93,24 +71,47 @@ func (s *Server) ExportPolicy(w http.ResponseWriter, r *http.Request) {
 	rules := make([]api.Rule, len(assocs))
 	for i, res := range assocs {
 		ops, _ := res["operations"].([]string)
-		uaID := res["ua_id"].(uuid.UUID)
-		oaID := res["oa_id"].(uuid.UUID)
+
+		// Get subject type and ID
+		subjectType, ok := res["subject_type"].(string)
+		if !ok {
+			continue // Skip invalid entries
+		}
+		subjectID, ok := res["subject_id"].(uuid.UUID)
+		if !ok {
+			continue // Skip invalid entries
+		}
+
+		// Get object type and ID
+		objectType, ok := res["object_type"].(string)
+		if !ok {
+			continue // Skip invalid entries
+		}
+		objectID, ok := res["object_id"].(uuid.UUID)
+		if !ok {
+			continue // Skip invalid entries
+		}
+
+		createdAt := time.Now()
+		if ct, ok := res["created_at"].(time.Time); ok {
+			createdAt = ct
+		}
+
 		rules[i] = api.Rule{
 			ID:          res["id"].(uuid.UUID),
-			Name:        "Rule", // TODO: Get from DB if available
 			Description: "",
 			Actions:     ops,
 			SubjectSelector: api.NodeRef{
-				Type: "subject-set",
-				ID:   uaID,
+				Type: subjectType,
+				ID:   subjectID,
 			},
 			ObjectSelector: api.NodeRef{
-				Type: "object-set",
-				ID:   oaID,
+				Type: objectType,
+				ID:   objectID,
 			},
 			Effect:    "ALLOW",
 			Enabled:   true,
-			CreatedAt: time.Now(), // TODO: Get from DB if available
+			CreatedAt: createdAt,
 		}
 	}
 
@@ -119,7 +120,7 @@ func (s *Server) ExportPolicy(w http.ResponseWriter, r *http.Request) {
 		ops, _ := res["operations"].([]string)
 		subjectType := "subject"
 		if res["subject_type"].(postgres.ProhibitionSubjectType) == postgres.ProhibitUA {
-			subjectType = "subject-set"
+			subjectType = "subject-attribute"
 		}
 		denies[i] = httputil.Deny{
 			ID: res["id"].(uuid.UUID),
@@ -130,7 +131,7 @@ func (s *Server) ExportPolicy(w http.ResponseWriter, r *http.Request) {
 			Operations: ops,
 			Targets: []httputil.Scope{
 				{
-					Type: "object-set",
+					Type: "object-attribute",
 					ID:   res["oa_id"].(uuid.UUID),
 				},
 			},
@@ -139,15 +140,15 @@ func (s *Server) ExportPolicy(w http.ResponseWriter, r *http.Request) {
 
 	rev, _ := s.engine.GetDB().GetCurrentRevision(r.Context(), tenantID)
 
-	bundle := httputil.PolicyBundle{
-		Revision:      rev,
-		Subjects:      subjectModels,
-		SubjectSets:   subjectSets,
-		Objects:       objs,
-		ObjectSets:    objectSets,
-		Relationships: relationships,
-		Rules:         rules,
-		Denies:        denies,
+	bundle := api.PolicyBundle{
+		Revision:           rev,
+		Subjects:           subjectModels,
+		SubjectAttributes:  subjectAttributes,
+		Objects:            objs,
+		ObjectAttributes:   objectAttributes,
+		Relationships:      relationships,
+		Rules:              rules,
+		Denies:             denies,
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -156,10 +157,6 @@ func (s *Server) ExportPolicy(w http.ResponseWriter, r *http.Request) {
 
 // ImportPolicy imports a policy bundle
 func (s *Server) ImportPolicy(w http.ResponseWriter, r *http.Request) {
-	if httputil.IsMockMode(r.Context()) {
-		mock.ImportPolicy(w, r)
-		return
-	}
 
 	tenantID, ok := httputil.GetTenantID(r.Context())
 	if !ok {
@@ -182,10 +179,20 @@ func (s *Server) ImportPolicy(w http.ResponseWriter, r *http.Request) {
 
 	// Import subjects
 	for _, subj := range req.Bundle.Subjects {
+		name := subj.Name
+		if name == "" {
+			name = "imported"
+		}
+		metaJSON := []byte("{}")
+		if len(subj.Metadata) > 0 {
+			metaJSON, _ = json.Marshal(subj.Metadata)
+		}
 		subject := &postgres.Subject{
-			ExternalID: subj.ExternalID,
-			Email:      subj.Email,
-			Display:    subj.Display,
+			ExternalID:  name,
+			Display:     name,
+			DisplayName: name,
+			Kind:        subj.Kind,
+			Tags:        datatypes.JSON(metaJSON),
 		}
 		_, err := s.engine.GetDB().CreateSubject(r.Context(), tenantID, subject)
 		if err == nil {
@@ -193,9 +200,9 @@ func (s *Server) ImportPolicy(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Import subject sets
-	for _, sg := range req.Bundle.SubjectSets {
-		ua := &postgres.SubjectAttribute{Name: sg.Name}
+	// Import subject attributes
+	for _, sa := range req.Bundle.SubjectAttributes {
+		ua := &postgres.SubjectAttribute{Name: sa.Name}
 		_, err := s.engine.GetDB().CreateSubjectSet(r.Context(), tenantID, ua)
 		if err == nil {
 			applied++
@@ -204,9 +211,24 @@ func (s *Server) ImportPolicy(w http.ResponseWriter, r *http.Request) {
 
 	// Import objects
 	for _, obj := range req.Bundle.Objects {
+		name := obj.Name
+		if name == "" {
+			name = "imported"
+		}
+		kind := obj.Kind
+		if kind == "" {
+			kind = "resource"
+		}
+		metaJSON := []byte("{}")
+		if len(obj.Metadata) > 0 {
+			metaJSON, _ = json.Marshal(obj.Metadata)
+		}
 		o := &postgres.Object{
-			ExternalID: obj.ExternalID,
-			Type:       obj.Type,
+			ExternalID:    name,
+			AttributeType: kind,
+			DisplayName:   name,
+			Kind:          kind,
+			Tags:          datatypes.JSON(metaJSON),
 		}
 		_, err := s.engine.GetDB().CreateObject(r.Context(), tenantID, o)
 		if err == nil {
@@ -214,10 +236,10 @@ func (s *Server) ImportPolicy(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Import object sets
-	for _, og := range req.Bundle.ObjectSets {
-		oa := &postgres.ObjectAttribute{Name: og.Name}
-		_, err := s.engine.GetDB().CreateObjectSet(r.Context(), tenantID, oa)
+	// Import object attributes
+	for _, oa := range req.Bundle.ObjectAttributes {
+		objAttr := &postgres.ObjectAttribute{Name: oa.Name}
+		_, err := s.engine.GetDB().CreateObjectSet(r.Context(), tenantID, objAttr)
 		if err == nil {
 			applied++
 		}
@@ -243,7 +265,7 @@ func (s *Server) ImportPolicy(w http.ResponseWriter, r *http.Request) {
 
 	// Import rules
 	for _, rule := range req.Bundle.Rules {
-		_, _, err := s.engine.GetDB().CreateRule(r.Context(), tenantID, rule.SubjectSelector.ID, rule.ObjectSelector.ID, rule.Actions)
+		_, _, err := s.engine.GetDB().CreateRule(r.Context(), tenantID, rule.SubjectSelector.Type, rule.SubjectSelector.ID, rule.ObjectSelector.Type, rule.ObjectSelector.ID, rule.Actions)
 		if err == nil {
 			applied++
 		}
@@ -252,7 +274,7 @@ func (s *Server) ImportPolicy(w http.ResponseWriter, r *http.Request) {
 	// Import denies
 	for _, deny := range req.Bundle.Denies {
 		subjectType := postgres.ProhibitSubject
-		if deny.Subject.Type == "subject-set" {
+		if deny.Subject.Type == "subject-attribute" {
 			subjectType = postgres.ProhibitUA
 		}
 		if len(deny.Targets) > 0 {

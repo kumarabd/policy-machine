@@ -5,7 +5,6 @@ import (
 	"net/http"
 
 	"github.com/kumarabd/policy-machine/pkg/api"
-	"github.com/kumarabd/policy-machine/internal/mock"
 	httputil "github.com/kumarabd/policy-machine/internal/http"
 )
 
@@ -17,10 +16,6 @@ import (
 // @Success 200 {object} api.SearchResponse[api.PolicyScope]
 // @Router /api/v1/scopes [get]
 func (s *Server) ListScopes(w http.ResponseWriter, r *http.Request) {
-	if httputil.IsMockMode(r.Context()) {
-		mock.ListScopes(w, r)
-		return
-	}
 
 	_, ok := httputil.GetTenantID(r.Context())
 	if !ok {

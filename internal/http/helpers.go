@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/kumarabd/policy-machine/pkg/engine"
 	"github.com/kumarabd/policy-machine/internal/postgres"
+	"github.com/kumarabd/policy-machine/pkg/engine"
 )
 
 // RespondError writes a JSON error response (exported for use by dataplane/controlplane)
@@ -34,5 +34,14 @@ func RespondJSON(w http.ResponseWriter, data interface{}) {
 // getDBFromEngine gets the DB handler from engine
 func getDBFromEngine(eng *engine.Engine) *postgres.Handler {
 	return eng.GetDB()
+}
+
+// HandleDBError is a small helper to translate common DB errors into HTTP responses.
+func HandleDBError(w http.ResponseWriter, err error, resource string) {
+	if err == postgres.ErrNotFound {
+		RespondError(w, http.StatusNotFound, "NOT_FOUND", resource+" not found")
+		return
+	}
+	RespondError(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 }
 

@@ -7,19 +7,16 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/kumarabd/policy-machine/internal/api/mapper"
 	httputil "github.com/kumarabd/policy-machine/internal/http"
-	"github.com/kumarabd/policy-machine/internal/mock"
 	"github.com/kumarabd/policy-machine/internal/postgres"
 	"github.com/kumarabd/policy-machine/pkg/api"
+	"gorm.io/datatypes"
 	"gorm.io/gorm"
 )
 
 // ListObjects returns paginated list of objects
 func (s *Server) ListObjects(w http.ResponseWriter, r *http.Request) {
-	if httputil.IsMockMode(r.Context()) {
-		mock.ListObjects(w, r)
-		return
-	}
 
 	tenantID, ok := httputil.GetTenantID(r.Context())
 	if !ok {
@@ -36,28 +33,18 @@ func (s *Server) ListObjects(w http.ResponseWriter, r *http.Request) {
 	}
 	cursor := r.URL.Query().Get("cursor")
 
-	objects, nextCursor, hasMore, err := s.engine.GetDB().ListObjects(r.Context(), tenantID, query, limit, cursor)
+	// Get attribute filters (can be multiple)
+	attributeFilters := r.URL.Query()["attribute"]
+
+	objects, nextCursor, hasMore, err := s.engine.GetDB().ListObjects(r.Context(), tenantID, query, limit, cursor, attributeFilters)
 	if err != nil {
 		httputil.RespondError(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return
 	}
 
 	objs := make([]api.Object, len(objects))
-	for i, o := range objects {
-		displayName := o.ExternalID
-		if o.Type != "" {
-			displayName = o.Type + ": " + o.ExternalID
-		}
-		objs[i] = api.Object{
-			ID:          o.ID,
-			ExternalID:  o.ExternalID,
-			Type:        o.Type,
-			DisplayName: displayName,
-			Kind:        o.Type,
-			Attributes:  make(map[string]string),
-			Tags:        []string{},
-			CreatedAt:   o.CreatedAt,
-		}
+	for i := range objects {
+		objs[i] = mapper.Object(&objects[i])
 	}
 
 	var nextCursorPtr *string
@@ -78,10 +65,6 @@ func (s *Server) ListObjects(w http.ResponseWriter, r *http.Request) {
 
 // CreateObject creates a new object
 func (s *Server) CreateObject(w http.ResponseWriter, r *http.Request) {
-	if httputil.IsMockMode(r.Context()) {
-		mock.CreateObject(w, r)
-		return
-	}
 
 	tenantID, ok := httputil.GetTenantID(r.Context())
 	if !ok {
@@ -95,14 +78,14 @@ func (s *Server) CreateObject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.ExternalID == "" {
-		httputil.RespondError(w, http.StatusBadRequest, "VALIDATION_ERROR", "external_id is required")
+	if req.Name == "" {
+		httputil.RespondError(w, http.StatusBadRequest, "VALIDATION_ERROR", "name is required")
 		return
 	}
 
-	obj := &postgres.Object{
-		ExternalID: req.ExternalID,
-		Type:       req.Type,
+	obj := mapper.CreateObjectRequestToPostgres(api.CreateObjectRequest(req))
+	if obj.Tags == nil {
+		obj.Tags = datatypes.JSON("{}")
 	}
 
 	revision, err := s.engine.GetDB().CreateObject(r.Context(), tenantID, obj)
@@ -111,21 +94,8 @@ func (s *Server) CreateObject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	displayName := obj.ExternalID
-	if obj.Type != "" {
-		displayName = obj.Type + ": " + obj.ExternalID
-	}
 	response := api.ObjectResponse{
-		Object: api.Object{
-			ID:          obj.ID,
-			ExternalID:  obj.ExternalID,
-			Type:        obj.Type,
-			DisplayName: displayName,
-			Kind:        obj.Type,
-			Attributes:  make(map[string]string),
-			Tags:        []string{},
-			CreatedAt:   obj.CreatedAt,
-		},
+		Object:   mapper.Object(obj),
 		Revision: revision,
 	}
 
@@ -136,10 +106,6 @@ func (s *Server) CreateObject(w http.ResponseWriter, r *http.Request) {
 
 // GetObject returns an object by ID
 func (s *Server) GetObject(w http.ResponseWriter, r *http.Request) {
-	if httputil.IsMockMode(r.Context()) {
-		mock.GetObject(w, r)
-		return
-	}
 
 	tenantID, ok := httputil.GetTenantID(r.Context())
 	if !ok {
@@ -164,20 +130,7 @@ func (s *Server) GetObject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	displayName := obj.ExternalID
-	if obj.Type != "" {
-		displayName = obj.Type + ": " + obj.ExternalID
-	}
-	response := api.Object{
-		ID:          obj.ID,
-		ExternalID:  obj.ExternalID,
-		Type:        obj.Type,
-		DisplayName: displayName,
-		Kind:        obj.Type,
-		Attributes:  make(map[string]string),
-		Tags:        []string{},
-		CreatedAt:   obj.CreatedAt,
-	}
+	response := mapper.Object(obj)
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response)
@@ -185,10 +138,6 @@ func (s *Server) GetObject(w http.ResponseWriter, r *http.Request) {
 
 // UpdateObject updates an object
 func (s *Server) UpdateObject(w http.ResponseWriter, r *http.Request) {
-	if httputil.IsMockMode(r.Context()) {
-		mock.UpdateObject(w, r)
-		return
-	}
 
 	tenantID, ok := httputil.GetTenantID(r.Context())
 	if !ok {
@@ -210,8 +159,17 @@ func (s *Server) UpdateObject(w http.ResponseWriter, r *http.Request) {
 	}
 
 	updates := make(map[string]interface{})
-	if req.Type != "" {
-		updates["type"] = req.Type
+	if req.Name != "" {
+		updates["external_id"] = req.Name
+		updates["display_name"] = req.Name
+	}
+	if req.Kind != "" {
+		updates["kind"] = req.Kind
+		updates["attribute_type"] = req.Kind
+	}
+	if len(req.Metadata) > 0 {
+		tagsJSON, _ := json.Marshal(req.Metadata)
+		updates["tags"] = datatypes.JSON(tagsJSON)
 	}
 
 	if len(updates) == 0 {
@@ -231,21 +189,23 @@ func (s *Server) UpdateObject(w http.ResponseWriter, r *http.Request) {
 
 	obj, _ := s.engine.GetDB().GetObject(r.Context(), tenantID, id)
 
-	displayName := obj.ExternalID
-	if obj.Type != "" {
-		displayName = obj.Type + ": " + obj.ExternalID
+	// Get all attributes (both native and custom) assigned to this object
+	attributes, err := s.engine.GetDB().GetObjectAttributes(r.Context(), tenantID, id)
+	if err != nil {
+		// Log error but continue - attributes are optional
+		attributes = []postgres.ObjectAttribute{}
 	}
+
+	resObj := mapper.Object(obj)
+	for _, attr := range attributes {
+		if resObj.Metadata == nil {
+			resObj.Metadata = make(map[string]string)
+		}
+		resObj.Metadata["attr:"+attr.Name] = string(attr.AttributeType)
+	}
+
 	response := api.ObjectResponse{
-		Object: api.Object{
-			ID:          obj.ID,
-			ExternalID:  obj.ExternalID,
-			Type:        obj.Type,
-			DisplayName: displayName,
-			Kind:        obj.Type,
-			Attributes:  make(map[string]string),
-			Tags:        []string{},
-			CreatedAt:   obj.CreatedAt,
-		},
+		Object:   resObj,
 		Revision: revision,
 	}
 
@@ -255,10 +215,6 @@ func (s *Server) UpdateObject(w http.ResponseWriter, r *http.Request) {
 
 // DeleteObject deletes an object
 func (s *Server) DeleteObject(w http.ResponseWriter, r *http.Request) {
-	if httputil.IsMockMode(r.Context()) {
-		mock.DeleteObject(w, r)
-		return
-	}
 
 	tenantID, ok := httputil.GetTenantID(r.Context())
 	if !ok {
@@ -286,12 +242,8 @@ func (s *Server) DeleteObject(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// ListObjectSets returns paginated list of object sets
-func (s *Server) ListObjectSets(w http.ResponseWriter, r *http.Request) {
-	if httputil.IsMockMode(r.Context()) {
-		mock.ListObjectSets(w, r)
-		return
-	}
+// ListObjectAttributesCustom returns paginated list of custom object attributes (with members).
+func (s *Server) ListObjectAttributesCustom(w http.ResponseWriter, r *http.Request) {
 
 	tenantID, ok := httputil.GetTenantID(r.Context())
 	if !ok {
@@ -314,24 +266,9 @@ func (s *Server) ListObjectSets(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	groups := make([]api.ObjectSet, len(oas))
-	for i, oa := range oas {
-		// Get member IDs for this object set
-		memberIDs, err := s.engine.GetDB().GetObjectSetMembers(r.Context(), tenantID, oa.ID)
-		if err != nil {
-			// Log error but continue with empty member list
-			memberIDs = []uuid.UUID{}
-		}
-		groups[i] = api.ObjectSet{
-			ID:              oa.ID,
-			Name:            oa.Name,
-			Description:     "",
-			ScopeID:         nil,
-			Tags:            []string{},
-			MemberObjectIDs: memberIDs,
-			CreatedAt:       oa.CreatedAt,
-			UpdatedAt:       nil,
-		}
+	groups := make([]api.ObjectAttribute, len(oas))
+	for i := range oas {
+		groups[i] = mapper.ObjectAttribute(&oas[i])
 	}
 
 	var nextCursorPtr *string
@@ -340,7 +277,7 @@ func (s *Server) ListObjectSets(w http.ResponseWriter, r *http.Request) {
 	}
 	total := len(groups)
 
-	response := api.SearchResponse[api.ObjectSet]{
+	response := api.SearchResponse[api.ObjectAttribute]{
 		Items:      groups,
 		NextCursor: nextCursorPtr,
 		Total:      &total,
@@ -350,12 +287,8 @@ func (s *Server) ListObjectSets(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(response)
 }
 
-// CreateObjectSet creates a new object set
-func (s *Server) CreateObjectSet(w http.ResponseWriter, r *http.Request) {
-	if httputil.IsMockMode(r.Context()) {
-		mock.CreateObjectSet(w, r)
-		return
-	}
+// CreateObjectAttributeCustom creates a new custom object attribute.
+func (s *Server) CreateObjectAttributeCustom(w http.ResponseWriter, r *http.Request) {
 
 	tenantID, ok := httputil.GetTenantID(r.Context())
 	if !ok {
@@ -363,7 +296,7 @@ func (s *Server) CreateObjectSet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var req httputil.CreateObjectSetRequest
+	var req api.CreateObjectAttributeRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		httputil.RespondError(w, http.StatusBadRequest, "INVALID_REQUEST", err.Error())
 		return
@@ -374,9 +307,8 @@ func (s *Server) CreateObjectSet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	oa := &postgres.ObjectAttribute{
-		Name: req.Name,
-	}
+	oa := mapper.CreateObjectAttributeRequestToPostgres(req)
+	oa.AttributeType = postgres.AttributeTypeCustom
 
 	revision, err := s.engine.GetDB().CreateObjectSet(r.Context(), tenantID, oa)
 	if err != nil {
@@ -384,13 +316,9 @@ func (s *Server) CreateObjectSet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	response := httputil.ObjectSetResponse{
-		Group: api.ObjectSet{
-			ID:        oa.ID,
-			Name:      oa.Name,
-			CreatedAt: oa.CreatedAt,
-		},
-		Revision: revision,
+	response := api.ObjectAttributeResponse{
+		Attribute: mapper.ObjectAttribute(oa),
+		Revision:  revision,
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -398,12 +326,8 @@ func (s *Server) CreateObjectSet(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(response)
 }
 
-// GetObjectSet returns an object set by ID
-func (s *Server) GetObjectSet(w http.ResponseWriter, r *http.Request) {
-	if httputil.IsMockMode(r.Context()) {
-		mock.GetObjectSet(w, r)
-		return
-	}
+// GetObjectAttributeCustom returns a custom object attribute by ID (with members).
+func (s *Server) GetObjectAttributeCustom(w http.ResponseWriter, r *http.Request) {
 
 	tenantID, ok := httputil.GetTenantID(r.Context())
 	if !ok {
@@ -414,48 +338,32 @@ func (s *Server) GetObjectSet(w http.ResponseWriter, r *http.Request) {
 	idStr := chi.URLParam(r, "id")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
-		httputil.RespondError(w, http.StatusBadRequest, "INVALID_ID", "Invalid group ID")
+		httputil.RespondError(w, http.StatusBadRequest, "INVALID_ID", "Invalid attribute ID")
 		return
 	}
 
 	oa, err := s.engine.GetDB().GetObjectSet(r.Context(), tenantID, id)
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
-			httputil.RespondError(w, http.StatusNotFound, "NOT_FOUND", "object set not found")
+			httputil.RespondError(w, http.StatusNotFound, "NOT_FOUND", "object attribute not found")
 			return
 		}
 		httputil.RespondError(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return
 	}
 
-	// Get member IDs from assignment edges
-	memberIDs, err := s.engine.GetDB().GetObjectSetMembers(r.Context(), tenantID, id)
-	if err != nil {
-		httputil.RespondError(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
+	// Validate that this is a custom attribute
+	if oa.AttributeType != postgres.AttributeTypeCustom {
+		httputil.RespondError(w, http.StatusNotFound, "NOT_FOUND", "custom object attribute not found")
 		return
-	}
-
-	group := api.ObjectSet{
-		ID:              oa.ID,
-		Name:            oa.Name,
-		Description:     "",
-		ScopeID:         nil,
-		Tags:            []string{},
-		MemberObjectIDs: memberIDs,
-		CreatedAt:       oa.CreatedAt,
-		UpdatedAt:       &oa.UpdatedAt,
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(group)
+	json.NewEncoder(w).Encode(mapper.ObjectAttribute(oa))
 }
 
-// UpdateObjectSet updates an object set
-func (s *Server) UpdateObjectSet(w http.ResponseWriter, r *http.Request) {
-	if httputil.IsMockMode(r.Context()) {
-		mock.UpdateObjectSet(w, r)
-		return
-	}
+// UpdateObjectAttributeCustom updates a custom object attribute.
+func (s *Server) UpdateObjectAttributeCustom(w http.ResponseWriter, r *http.Request) {
 
 	tenantID, ok := httputil.GetTenantID(r.Context())
 	if !ok {
@@ -466,11 +374,11 @@ func (s *Server) UpdateObjectSet(w http.ResponseWriter, r *http.Request) {
 	idStr := chi.URLParam(r, "id")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
-		httputil.RespondError(w, http.StatusBadRequest, "INVALID_ID", "Invalid group ID")
+		httputil.RespondError(w, http.StatusBadRequest, "INVALID_ID", "Invalid attribute ID")
 		return
 	}
 
-	var req httputil.UpdateObjectSetRequest
+	var req api.UpdateObjectAttributeRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		httputil.RespondError(w, http.StatusBadRequest, "INVALID_REQUEST", err.Error())
 		return
@@ -484,7 +392,7 @@ func (s *Server) UpdateObjectSet(w http.ResponseWriter, r *http.Request) {
 	revision, err := s.engine.GetDB().UpdateObjectSet(r.Context(), tenantID, id, req.Name)
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
-			httputil.RespondError(w, http.StatusNotFound, "NOT_FOUND", "object set not found")
+			httputil.RespondError(w, http.StatusNotFound, "NOT_FOUND", "object attribute not found")
 			return
 		}
 		httputil.RespondError(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
@@ -493,25 +401,17 @@ func (s *Server) UpdateObjectSet(w http.ResponseWriter, r *http.Request) {
 
 	oa, _ := s.engine.GetDB().GetObjectSet(r.Context(), tenantID, id)
 
-	response := httputil.ObjectSetResponse{
-		Group: api.ObjectSet{
-			ID:        oa.ID,
-			Name:      oa.Name,
-			CreatedAt: oa.CreatedAt,
-		},
-		Revision: revision,
+	response := api.ObjectAttributeResponse{
+		Attribute: mapper.ObjectAttribute(oa),
+		Revision:  revision,
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response)
 }
 
-// DeleteObjectSet deletes an object set
-func (s *Server) DeleteObjectSet(w http.ResponseWriter, r *http.Request) {
-	if httputil.IsMockMode(r.Context()) {
-		mock.DeleteObjectSet(w, r)
-		return
-	}
+// DeleteObjectAttributeCustom deletes an object attribute (should be custom attribute for object-sets API).
+func (s *Server) DeleteObjectAttributeCustom(w http.ResponseWriter, r *http.Request) {
 
 	tenantID, ok := httputil.GetTenantID(r.Context())
 	if !ok {
@@ -522,14 +422,14 @@ func (s *Server) DeleteObjectSet(w http.ResponseWriter, r *http.Request) {
 	idStr := chi.URLParam(r, "id")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
-		httputil.RespondError(w, http.StatusBadRequest, "INVALID_ID", "Invalid object set ID")
+		httputil.RespondError(w, http.StatusBadRequest, "INVALID_ID", "Invalid object attribute ID")
 		return
 	}
 
 	_, err = s.engine.GetDB().DeleteObjectSet(r.Context(), tenantID, id)
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
-			httputil.RespondError(w, http.StatusNotFound, "NOT_FOUND", "object set not found")
+			httputil.RespondError(w, http.StatusNotFound, "NOT_FOUND", "object attribute not found")
 			return
 		}
 		httputil.RespondError(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
@@ -537,4 +437,64 @@ func (s *Server) DeleteObjectSet(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// GetObjectAttributes returns the complete attribute tree for an object
+// @Summary Get object attribute tree
+// @Description Returns all attributes (native and custom) assigned to an object and their hierarchical relationships, forming a tree where the object is the root node
+// @Tags generic
+// @Produce json
+// @Param id path string true "Object ID"
+// @Success 200 {object} api.AttributeSubgraphResponse
+// @Router /api/v1/objects/{id}/attributes [get]
+func (s *Server) GetObjectAttributes(w http.ResponseWriter, r *http.Request) {
+	tenantID, ok := httputil.GetTenantID(r.Context())
+	if !ok {
+		httputil.RespondError(w, http.StatusBadRequest, "MISSING_TENANT", "Tenant ID required")
+		return
+	}
+
+	idStr := chi.URLParam(r, "id")
+	id, err := uuid.Parse(idStr)
+	if err != nil {
+		httputil.RespondError(w, http.StatusBadRequest, "INVALID_ID", "Invalid object ID")
+		return
+	}
+
+	attributes, edges, err := s.engine.GetDB().GetObjectAttributeSubgraph(r.Context(), tenantID, id)
+	if err != nil {
+		httputil.RespondError(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
+		return
+	}
+
+	// Convert to API response format
+	nodes := make([]api.AttributeNode, len(attributes))
+	for i, attr := range attributes {
+		nodes[i] = api.AttributeNode{
+			ID:            attr.ID,
+			Name:          attr.Name,
+			AttributeType: string(attr.AttributeType),
+		}
+	}
+
+	// Convert edges (include object->OA edges and OA->OA edges)
+	apiEdges := make([]api.AttributeEdge, 0, len(edges))
+	for _, edge := range edges {
+		// Include object->OA edges and OA->OA edges
+		if (edge.ChildType == postgres.NodeObject && edge.ParentType == postgres.NodeOA) ||
+			(edge.ChildType == postgres.NodeOA && edge.ParentType == postgres.NodeOA) {
+			apiEdges = append(apiEdges, api.AttributeEdge{
+				ChildID:  edge.ChildID,
+				ParentID: edge.ParentID,
+			})
+		}
+	}
+
+	response := api.AttributeSubgraphResponse{
+		Nodes: nodes,
+		Edges: apiEdges,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
 }

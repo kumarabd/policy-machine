@@ -164,11 +164,16 @@ func LoadSnapshot(ctx context.Context, db *gorm.DB, tenantID string) (*Snapshot,
 	}
 
 	// Map associationID -> (uaIdx, oaIdx)
+	// Engine currently processes UA->OA associations
 	type assocKey struct{ ua, oa uint32 }
 	assocMap := make(map[uuid.UUID]assocKey, len(assocs))
 	for _, a := range assocs {
-		uaIdx, ok1 := s.uaIndex[a.SubjectAttributeID]
-		oaIdx, ok2 := s.oaIndex[a.ObjectAttributeID]
+		// Process UA->OA associations
+		if a.SubjectAttributeID == nil || a.ObjectAttributeID == nil {
+			continue
+		}
+		uaIdx, ok1 := s.uaIndex[*a.SubjectAttributeID]
+		oaIdx, ok2 := s.oaIndex[*a.ObjectAttributeID]
 		if !ok1 || !ok2 {
 			continue
 		}

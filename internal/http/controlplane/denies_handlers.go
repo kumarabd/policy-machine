@@ -9,17 +9,12 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	httputil "github.com/kumarabd/policy-machine/internal/http"
-	"github.com/kumarabd/policy-machine/internal/mock"
 	"github.com/kumarabd/policy-machine/internal/postgres"
 	"gorm.io/gorm"
 )
 
 // ListDenies returns paginated list of deny rules (prohibitions)
 func (s *Server) ListDenies(w http.ResponseWriter, r *http.Request) {
-	if httputil.IsMockMode(r.Context()) {
-		mock.ListDenies(w, r)
-		return
-	}
 
 	tenantID, ok := httputil.GetTenantID(r.Context())
 	if !ok {
@@ -61,7 +56,7 @@ func (s *Server) ListDenies(w http.ResponseWriter, r *http.Request) {
 		ops, _ := res["operations"].([]string)
 		subjectType := "subject"
 		if res["subject_type"].(postgres.ProhibitionSubjectType) == postgres.ProhibitUA {
-			subjectType = "subject-set"
+			subjectType = "subject-attribute"
 		}
 		denies[i] = httputil.Deny{
 			ID: res["id"].(uuid.UUID),
@@ -72,7 +67,7 @@ func (s *Server) ListDenies(w http.ResponseWriter, r *http.Request) {
 			Operations: ops,
 			Targets: []httputil.Scope{
 				{
-					Type: "object-set",
+					Type: "object-attribute",
 					ID:   res["oa_id"].(uuid.UUID),
 				},
 			},
@@ -92,10 +87,6 @@ func (s *Server) ListDenies(w http.ResponseWriter, r *http.Request) {
 
 // CreateDeny creates a new deny rule (prohibition)
 func (s *Server) CreateDeny(w http.ResponseWriter, r *http.Request) {
-	if httputil.IsMockMode(r.Context()) {
-		mock.CreateDeny(w, r)
-		return
-	}
 
 	tenantID, ok := httputil.GetTenantID(r.Context())
 	if !ok {
@@ -119,8 +110,10 @@ func (s *Server) CreateDeny(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Map subject type
+	// Note: "subject-set" is API terminology only for the /api/v1/subject-sets endpoint.
+	// In Deny API, we use "subject-attribute" to refer to SubjectAttribute (UA) entities.
 	subjectType := postgres.ProhibitSubject
-	if req.Subject.Type == "subject-set" {
+	if req.Subject.Type == "subject-attribute" {
 		subjectType = postgres.ProhibitUA
 	}
 
@@ -151,10 +144,6 @@ func (s *Server) CreateDeny(w http.ResponseWriter, r *http.Request) {
 
 // GetDeny returns a deny rule by ID
 func (s *Server) GetDeny(w http.ResponseWriter, r *http.Request) {
-	if httputil.IsMockMode(r.Context()) {
-		mock.GetDeny(w, r)
-		return
-	}
 
 	tenantID, ok := httputil.GetTenantID(r.Context())
 	if !ok {
@@ -181,7 +170,7 @@ func (s *Server) GetDeny(w http.ResponseWriter, r *http.Request) {
 
 	subjectType := "subject"
 	if proh.SubjectType == postgres.ProhibitUA {
-		subjectType = "subject-set"
+		subjectType = "subject-attribute"
 	}
 
 	deny := httputil.Deny{
@@ -193,7 +182,7 @@ func (s *Server) GetDeny(w http.ResponseWriter, r *http.Request) {
 		Operations: ops,
 		Targets: []httputil.Scope{
 			{
-				Type: "object-set",
+				Type: "object-attribute",
 				ID:   proh.ObjectAttributeID,
 			},
 		},
@@ -206,10 +195,6 @@ func (s *Server) GetDeny(w http.ResponseWriter, r *http.Request) {
 
 // UpdateDeny updates a deny rule
 func (s *Server) UpdateDeny(w http.ResponseWriter, r *http.Request) {
-	if httputil.IsMockMode(r.Context()) {
-		mock.UpdateDeny(w, r)
-		return
-	}
 
 	tenantID, ok := httputil.GetTenantID(r.Context())
 	if !ok {
@@ -257,7 +242,7 @@ func (s *Server) UpdateDeny(w http.ResponseWriter, r *http.Request) {
 
 	subjectType := "subject"
 	if proh.SubjectType == postgres.ProhibitUA {
-		subjectType = "subject-set"
+		subjectType = "subject-attribute"
 	}
 
 	response := httputil.DenyResponse{
@@ -270,7 +255,7 @@ func (s *Server) UpdateDeny(w http.ResponseWriter, r *http.Request) {
 			Operations: ops,
 			Targets: []httputil.Scope{
 				{
-					Type: "object-set",
+					Type: "object-attribute",
 					ID:   proh.ObjectAttributeID,
 				},
 			},
@@ -285,10 +270,6 @@ func (s *Server) UpdateDeny(w http.ResponseWriter, r *http.Request) {
 
 // DeleteDeny deletes a deny rule
 func (s *Server) DeleteDeny(w http.ResponseWriter, r *http.Request) {
-	if httputil.IsMockMode(r.Context()) {
-		mock.DeleteDeny(w, r)
-		return
-	}
 
 	tenantID, ok := httputil.GetTenantID(r.Context())
 	if !ok {

@@ -7,7 +7,6 @@ import (
 
 	"github.com/google/uuid"
 	httputil "github.com/kumarabd/policy-machine/internal/http"
-	"github.com/kumarabd/policy-machine/internal/mock"
 	"github.com/kumarabd/policy-machine/internal/postgres"
 	"github.com/kumarabd/policy-machine/internal/validate"
 	"gorm.io/gorm"
@@ -15,10 +14,6 @@ import (
 
 // ListRelationships returns paginated list of relationships
 func (s *Server) ListRelationships(w http.ResponseWriter, r *http.Request) {
-	if httputil.IsMockMode(r.Context()) {
-		mock.ListRelationships(w, r)
-		return
-	}
 
 	tenantID, ok := httputil.GetTenantID(r.Context())
 	if !ok {
@@ -85,10 +80,6 @@ func (s *Server) ListRelationships(w http.ResponseWriter, r *http.Request) {
 
 // CreateRelationship creates a new relationship
 func (s *Server) CreateRelationship(w http.ResponseWriter, r *http.Request) {
-	if httputil.IsMockMode(r.Context()) {
-		mock.CreateRelationship(w, r)
-		return
-	}
 
 	tenantID, ok := httputil.GetTenantID(r.Context())
 	if !ok {
@@ -148,10 +139,6 @@ func (s *Server) CreateRelationship(w http.ResponseWriter, r *http.Request) {
 
 // DeleteRelationship deletes a relationship
 func (s *Server) DeleteRelationship(w http.ResponseWriter, r *http.Request) {
-	if httputil.IsMockMode(r.Context()) {
-		mock.DeleteRelationship(w, r)
-		return
-	}
 
 	tenantID, ok := httputil.GetTenantID(r.Context())
 	if !ok {
@@ -202,16 +189,19 @@ func (s *Server) DeleteRelationship(w http.ResponseWriter, r *http.Request) {
 }
 
 // Helper functions (exported for use in other handlers)
+// MapNodeTypeToUI maps database NodeType to relationship API type names.
+// Note: "subject-set" and "object-set" are API terminology ONLY for the subject-sets/object-sets endpoints.
+// In relationships API, we use "subject-attribute" and "object-attribute" to refer to the actual entities.
 func MapNodeTypeToUI(nt postgres.NodeType) string {
 	switch nt {
 	case postgres.NodeSubject:
 		return "subject"
 	case postgres.NodeUA:
-		return "subject-set"
+		return "subject-attribute"
 	case postgres.NodeObject:
 		return "object"
 	case postgres.NodeOA:
-		return "object-set"
+		return "object-attribute"
 	default:
 		return string(nt)
 	}
@@ -219,16 +209,16 @@ func MapNodeTypeToUI(nt postgres.NodeType) string {
 
 func InferRelationshipKind(childType, parentType postgres.NodeType) string {
 	if childType == postgres.NodeSubject && parentType == postgres.NodeUA {
-		return "subject_member_of_set"
+		return "subject_member_of_attribute"
 	}
 	if childType == postgres.NodeUA && parentType == postgres.NodeUA {
-		return "subject_set_parent_of_set"
+		return "subject_attribute_parent_of_attribute"
 	}
 	if childType == postgres.NodeObject && parentType == postgres.NodeOA {
-		return "object_member_of_set"
+		return "object_member_of_attribute"
 	}
 	if childType == postgres.NodeOA && parentType == postgres.NodeOA {
-		return "object_set_parent_of_set"
+		return "object_attribute_parent_of_attribute"
 	}
 	return "unknown"
 }

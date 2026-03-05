@@ -3,7 +3,6 @@ package http
 import (
 	"context"
 	"net/http"
-	"strconv"
 	"strings"
 
 	"github.com/kumarabd/policy-machine/pkg/engine"
@@ -12,10 +11,9 @@ import (
 type contextKey string
 
 const tenantIDKey contextKey = "tenant_id"
-const mockModeKey contextKey = "mock_mode"
 
 // TenantMiddleware extracts tenant ID from X-Tenant-ID or X-Tenant-Id header
-// Returns 400 if tenant ID is missing (same behavior for mock and production)
+// Returns 400 if tenant ID is missing
 // Excludes swagger endpoints from tenant validation
 func TenantMiddleware(eng *engine.Engine, defaultTenantID string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
@@ -45,19 +43,8 @@ func TenantMiddleware(eng *engine.Engine, defaultTenantID string) func(http.Hand
 				return
 			}
 
-			// Check for X-Mock-Mode header
-			mockMode := false
-			if mockModeStr := r.Header.Get("X-Mock-Mode"); mockModeStr != "" {
-				if val, err := strconv.ParseBool(mockModeStr); err == nil {
-					mockMode = val
-				} else if strings.ToLower(mockModeStr) == "true" {
-					mockMode = true
-				}
-			}
-
-			// Store tenant ID and mock mode in context
+			// Store tenant ID in context
 			ctx := context.WithValue(r.Context(), tenantIDKey, tenantID)
-			ctx = context.WithValue(ctx, mockModeKey, mockMode)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
@@ -67,10 +54,4 @@ func TenantMiddleware(eng *engine.Engine, defaultTenantID string) func(http.Hand
 func GetTenantID(ctx context.Context) (string, bool) {
 	tenantID, ok := ctx.Value(tenantIDKey).(string)
 	return tenantID, ok
-}
-
-// IsMockMode checks if mock mode is enabled from request context
-func IsMockMode(ctx context.Context) bool {
-	mockMode, ok := ctx.Value(mockModeKey).(bool)
-	return ok && mockMode
 }

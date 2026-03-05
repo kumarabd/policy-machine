@@ -145,15 +145,23 @@ func computeInvalidations(inv *invalidation, s *Snapshot, ch postgres.PolicyChan
 	case "ASSOC_OP":
 		// association changes do NOT affect closures, but affect allowCache(subject,op)
 		var p struct {
-			SubjectAttributeID uuid.UUID `json:"ua_id"`
-			ObjectAttributeID  uuid.UUID `json:"oa_id"`
-			Operation          string    `json:"op"`
+			SubjectType string    `json:"subject_type"`
+			SubjectID   uuid.UUID `json:"subject_id"`
+			ObjectType  string    `json:"object_type"`
+			ObjectID    uuid.UUID `json:"object_id"`
+			Operation   string    `json:"op"`
 		}
 		if json.Unmarshal(ch.Payload, &p) != nil {
 			return
 		}
+		// Engine currently only supports UA->OA associations
+		// Note: "subject-set" and "object-set" are API terminology only for the subject-sets/object-sets endpoints.
+		// In rules API, we use "subject-attribute" and "object-attribute" to refer to the actual entities.
+		if p.SubjectType != "subject-attribute" || p.ObjectType != "object-attribute" {
+			return // Skip non-UA->OA associations
+		}
 
-		uaIdx, ok := s.uaIndex[p.SubjectAttributeID]
+		uaIdx, ok := s.uaIndex[p.SubjectID]
 		if !ok {
 			return
 		}

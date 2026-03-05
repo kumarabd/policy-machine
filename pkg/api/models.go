@@ -1,3 +1,6 @@
+// Package api defines the HTTP API contract for the policy machine.
+// Models are client-agnostic DTOs with camelCase JSON for broad compatibility.
+// Persistence types live in internal/postgres; conversion is in internal/api/mapper.
 package api
 
 import (
@@ -24,16 +27,14 @@ type ErrorResponse struct {
 
 // --- Metadata & Revision ---
 type MetaResponse struct {
-	ServiceVersion string    `json:"service_version"`
-	TenantID       string    `json:"tenant_id"`
+	ServiceVersion string    `json:"serviceVersion"`
 	Revision       int64     `json:"revision"`
-	AppliedSeq     int64     `json:"applied_seq"`
+	AppliedSeq     int64     `json:"appliedSeq"`
 	Now            time.Time `json:"now"`
 }
 
 type RevisionResponse struct {
-	TenantID string `json:"tenant_id"`
-	Revision int64  `json:"revision"`
+	Revision int64 `json:"revision"`
 }
 
 type PolicyChangeItem struct {
@@ -45,10 +46,28 @@ type PolicyChangeItem struct {
 	CreatedAt time.Time              `json:"created_at"`
 }
 
+// AttributeNode represents an attribute in the attribute graph
+type AttributeNode struct {
+	ID            uuid.UUID `json:"id"`
+	Name          string    `json:"name"`
+	AttributeType string    `json:"type"` // "native" or "custom"
+}
+
+// AttributeEdge represents a relationship between two attributes (child -> parent)
+type AttributeEdge struct {
+	ChildID  uuid.UUID `json:"child_id"`
+	ParentID uuid.UUID `json:"parent_id"`
+}
+
+// AttributeSubgraphResponse represents the complete attribute subgraph for a subject or object
+type AttributeSubgraphResponse struct {
+	Nodes []AttributeNode `json:"nodes"`
+	Edges []AttributeEdge `json:"edges"`
+}
+
 type ChangesResponse struct {
-	TenantID string             `json:"tenant_id"`
-	FromSeq  int64              `json:"from_seq"`
-	ToSeq    int64              `json:"to_seq"`
+	FromSeq  int64              `json:"fromSeq"`
+	ToSeq    int64              `json:"toSeq"`
 	Changes  []PolicyChangeItem `json:"changes"`
 }
 
@@ -65,28 +84,24 @@ type Version struct {
 // ListVersionsResponse uses the generic SearchResponse
 type ListVersionsResponse = SearchResponse[Version]
 
-// --- Subjects (Subjects) ---
+// --- Subjects ---
 type Subject struct {
-	ID          uuid.UUID         `json:"id"`
-	ExternalID  string            `json:"external_id,omitempty"`
-	Email       string            `json:"email,omitempty"`
-	Display     string            `json:"display,omitempty"`
-	DisplayName string            `json:"displayName"` // UI expects this
-	Kind        string            `json:"kind,omitempty"`
-	Attributes  map[string]string `json:"attributes,omitempty"`
-	Tags        []string          `json:"tags,omitempty"`
-	CreatedAt   time.Time         `json:"createdAt,omitempty"`
+	ID       uuid.UUID         `json:"id"`
+	Name     string            `json:"name"`
+	Kind     string            `json:"kind,omitempty"`
+	Metadata map[string]string `json:"metadata,omitempty"`
 }
 
 type CreateSubjectRequest struct {
-	ExternalID string `json:"external_id"`
-	Email      string `json:"email,omitempty"`
-	Display    string `json:"display,omitempty"`
+	Name     string            `json:"name"`
+	Kind     string            `json:"kind,omitempty"`
+	Metadata map[string]string `json:"metadata,omitempty"`
 }
 
 type UpdateSubjectRequest struct {
-	Email   string `json:"email,omitempty"`
-	Display string `json:"display,omitempty"`
+	Name     string            `json:"name,omitempty"`
+	Kind     string            `json:"kind,omitempty"`
+	Metadata map[string]string `json:"metadata,omitempty"`
 }
 
 type SubjectResponse struct {
@@ -97,59 +112,57 @@ type SubjectResponse struct {
 type ListSubjectsResponse struct {
 	Subjects []Subject `json:"subjects"`
 	Cursor   string    `json:"cursor,omitempty"`
-	HasMore  bool      `json:"has_more"`
+	HasMore  bool      `json:"hasMore"`
 }
 
-// --- Subject Sets (UAs) ---
-type SubjectSet struct {
-	ID               uuid.UUID   `json:"id"`
-	Name             string      `json:"name"`
-	Description      string      `json:"description,omitempty"`
-	ScopeID          *uuid.UUID  `json:"scopeId,omitempty"`
-	Tags             []string    `json:"tags,omitempty"`
-	MemberSubjectIDs []uuid.UUID `json:"memberSubjectIds,omitempty"`
-	CreatedAt        time.Time   `json:"createdAt,omitempty"`
-	UpdatedAt        *time.Time  `json:"updatedAt,omitempty"`
+// --- Subject Attributes ---
+type SubjectAttribute struct {
+	ID       uuid.UUID         `json:"id"`
+	Name     string            `json:"name"`
+	Metadata map[string]string `json:"metadata,omitempty"`
 }
 
-type CreateSubjectSetRequest struct {
-	Name string `json:"name"`
+type CreateSubjectAttributeRequest struct {
+	Name     string            `json:"name"`
+	Metadata map[string]string `json:"metadata,omitempty"`
+	ParentName string          `json:"parentName,omitempty"`
+	ParentID   *uuid.UUID      `json:"parentId,omitempty"`
 }
 
-type UpdateSubjectSetRequest struct {
-	Name string `json:"name"`
+type UpdateSubjectAttributeRequest struct {
+	Name     string            `json:"name,omitempty"`
+	Metadata map[string]string `json:"metadata,omitempty"`
 }
 
-type SubjectSetResponse struct {
-	Group    SubjectSet `json:"group"`
-	Revision int64      `json:"revision"`
+type SubjectAttributeResponse struct {
+	Attribute SubjectAttribute `json:"attribute"`
+	Revision  int64            `json:"revision"`
 }
 
-type ListSubjectSetsResponse struct {
-	Groups  []SubjectSet `json:"groups"`
-	Cursor  string       `json:"cursor,omitempty"`
-	HasMore bool         `json:"has_more"`
+type ListSubjectAttributesResponse struct {
+	Attributes []SubjectAttribute `json:"attributes"`
+	Cursor     string             `json:"cursor,omitempty"`
+	HasMore    bool               `json:"hasMore"`
 }
 
 // --- Objects ---
 type Object struct {
-	ID          uuid.UUID         `json:"id"`
-	ExternalID  string            `json:"external_id,omitempty"`
-	Type        string            `json:"type,omitempty"`
-	DisplayName string            `json:"displayName"` // UI expects this
-	Kind        string            `json:"kind,omitempty"`
-	Attributes  map[string]string `json:"attributes,omitempty"`
-	Tags        []string          `json:"tags,omitempty"`
-	CreatedAt   time.Time         `json:"createdAt,omitempty"`
+	ID       uuid.UUID         `json:"id"`
+	Name     string            `json:"name"`
+	Kind     string            `json:"kind,omitempty"`
+	Metadata map[string]string `json:"metadata,omitempty"`
 }
 
 type CreateObjectRequest struct {
-	ExternalID string `json:"external_id"`
-	Type       string `json:"type,omitempty"`
+	Name     string            `json:"name"`
+	Kind     string            `json:"kind,omitempty"`
+	Metadata map[string]string `json:"metadata,omitempty"`
 }
 
 type UpdateObjectRequest struct {
-	Type string `json:"type,omitempty"`
+	Name     string            `json:"name,omitempty"`
+	Kind     string            `json:"kind,omitempty"`
+	Metadata map[string]string `json:"metadata,omitempty"`
 }
 
 type ObjectResponse struct {
@@ -160,49 +173,48 @@ type ObjectResponse struct {
 type ListObjectsResponse struct {
 	Objects []Object `json:"objects"`
 	Cursor  string   `json:"cursor,omitempty"`
-	HasMore bool     `json:"has_more"`
+	HasMore bool     `json:"hasMore"`
 }
 
-// --- Object Sets (OAs) ---
-type ObjectSet struct {
-	ID              uuid.UUID   `json:"id"`
-	Name            string      `json:"name"`
-	Description     string      `json:"description,omitempty"`
-	ScopeID         *uuid.UUID  `json:"scopeId,omitempty"`
-	Tags            []string    `json:"tags,omitempty"`
-	MemberObjectIDs []uuid.UUID `json:"memberObjectIds,omitempty"`
-	CreatedAt       time.Time   `json:"createdAt,omitempty"`
-	UpdatedAt       *time.Time  `json:"updatedAt,omitempty"`
+// --- Object Attributes ---
+type ObjectAttribute struct {
+	ID       uuid.UUID         `json:"id"`
+	Name     string            `json:"name"`
+	Metadata map[string]string `json:"metadata,omitempty"`
 }
 
-type CreateObjectSetRequest struct {
-	Name string `json:"name"`
+type CreateObjectAttributeRequest struct {
+	Name       string            `json:"name"`
+	Metadata   map[string]string `json:"metadata,omitempty"`
+	ParentName string            `json:"parentName,omitempty"`
+	ParentID   *uuid.UUID        `json:"parentId,omitempty"`
 }
 
-type UpdateObjectSetRequest struct {
-	Name string `json:"name"`
+type UpdateObjectAttributeRequest struct {
+	Name     string            `json:"name,omitempty"`
+	Metadata map[string]string `json:"metadata,omitempty"`
 }
 
-type ObjectSetResponse struct {
-	Group    ObjectSet `json:"group"`
-	Revision int64     `json:"revision"`
+type ObjectAttributeResponse struct {
+	Attribute ObjectAttribute `json:"attribute"`
+	Revision  int64           `json:"revision"`
 }
 
-type ListObjectSetsResponse struct {
-	Groups  []ObjectSet `json:"groups"`
-	Cursor  string      `json:"cursor,omitempty"`
-	HasMore bool        `json:"has_more"`
+type ListObjectAttributesResponse struct {
+	Attributes []ObjectAttribute `json:"attributes"`
+	Cursor     string            `json:"cursor,omitempty"`
+	HasMore    bool              `json:"hasMore"`
 }
 
 // --- Relationships (Assignment Edges) ---
 type NodeRef struct {
-	Type string    `json:"type"` // "subject", "subject-set", "object", "object-set"
+	Type string    `json:"type"` // "subject", "subject-attribute", "object", "object-attribute"
 	ID   uuid.UUID `json:"id"`
 }
 
 type Relationship struct {
 	ID   uuid.UUID `json:"id,omitempty"`
-	Kind string    `json:"kind"` // "subject_member_of_set", "subject_set_parent_of_set", etc.
+	Kind string    `json:"kind"` // "subject_member_of_attribute", "subject_attribute_parent_of_attribute", etc.
 	From NodeRef   `json:"from"`
 	To   NodeRef   `json:"to"`
 }
@@ -227,13 +239,14 @@ type RelationshipResponse struct {
 type ListRelationshipsResponse struct {
 	Relationships []Relationship `json:"relationships"`
 	Cursor        string         `json:"cursor,omitempty"`
-	HasMore       bool           `json:"has_more"`
+	HasMore       bool           `json:"hasMore"`
 }
 
 // --- Rules (Associations) ---
-// Scope is used in Deny rules (legacy)
+// Scope is used in Deny targets.
+// For Deny targets, use "subject-attribute" or "object-attribute" to refer to attribute entities.
 type Scope struct {
-	Type string    `json:"type"` // "subject-set", "object-set"
+	Type string    `json:"type"` // "subject-attribute", "object-attribute", "subject", "object"
 	ID   uuid.UUID `json:"id"`
 }
 
@@ -246,7 +259,6 @@ type PolicyScope struct {
 
 type Rule struct {
 	ID              uuid.UUID      `json:"id"`
-	Name            string         `json:"name"`
 	Description     string         `json:"description,omitempty"`
 	ScopeID         *uuid.UUID     `json:"scopeId,omitempty"`
 	Actions         []string       `json:"actions"`
@@ -266,7 +278,6 @@ type RuleCondition struct {
 }
 
 type CreateRuleRequest struct {
-	Name            string         `json:"name"`
 	Description     string         `json:"description,omitempty"`
 	ScopeID         *uuid.UUID     `json:"scopeId,omitempty"`
 	Actions         []string       `json:"actions"`
@@ -279,7 +290,6 @@ type CreateRuleRequest struct {
 }
 
 type UpdateRuleRequest struct {
-	Name        *string        `json:"name,omitempty"`
 	Description *string        `json:"description,omitempty"`
 	Actions     []string       `json:"actions,omitempty"`
 	Condition   *RuleCondition `json:"condition,omitempty"`
@@ -297,17 +307,18 @@ type RuleResponse struct {
 type ListRulesResponse struct {
 	Rules   []Rule `json:"rules"`
 	Cursor  string `json:"cursor,omitempty"`
-	HasMore bool   `json:"has_more"`
+	HasMore bool   `json:"hasMore"`
 }
 
 // --- Denies (Prohibitions) ---
+// In Deny API, use "subject-attribute" and "object-attribute" to refer to attribute entities.
 type Deny struct {
 	ID          uuid.UUID `json:"id"`
-	Subject     NodeRef   `json:"subject"` // type: "subject" or "subject-set"
+	Subject     NodeRef   `json:"subject"` // type: "subject" or "subject-attribute"
 	Operations  []string  `json:"operations"`
-	Targets     []Scope   `json:"targets"` // object-sets
+	Targets     []Scope   `json:"targets"` // type: "object" or "object-attribute"
 	Description string    `json:"description,omitempty"`
-	CreatedAt   time.Time `json:"created_at"`
+	CreatedAt   time.Time `json:"createdAt"`
 }
 
 type CreateDenyRequest struct {
@@ -331,7 +342,7 @@ type DenyResponse struct {
 type ListDeniesResponse struct {
 	Denies  []Deny `json:"denies"`
 	Cursor  string `json:"cursor,omitempty"`
-	HasMore bool   `json:"has_more"`
+	HasMore bool   `json:"hasMore"`
 }
 
 // --- Authorization ---
@@ -349,11 +360,11 @@ type AuthorizeResponse struct {
 // --- Evaluate (UI-compatible format) ---
 type EvaluateRequest struct {
 	Subject struct {
-		Type string `json:"type"` // "SUBJECT" or "SUBJECT_SET"
+		Type string `json:"type"` // "SUBJECT" or "SUBJECT_ATTRIBUTE"
 		ID   string `json:"id"`
 	} `json:"subject"`
 	Object struct {
-		Type string `json:"type"` // "OBJECT" or "OBJECT_SET"
+		Type string `json:"type"` // "OBJECT" or "OBJECT_ATTRIBUTE"
 		ID   string `json:"id"`
 	} `json:"object"`
 	Action      string                 `json:"action"`
@@ -425,8 +436,8 @@ type ExplainResponse struct {
 type GraphSummaryResponse struct {
 	Subjects      int `json:"subjects"`
 	Objects       int `json:"objects"`
-	SubjectSets   int `json:"subject_sets"`
-	ObjectSets    int `json:"object_sets"`
+	SubjectAttributes int `json:"subject_attributes"`
+	ObjectAttributes  int `json:"object_attributes"`
 	Relationships int `json:"relationships"`
 	Rules         int `json:"rules"`
 	Denies        int `json:"denies"`
@@ -434,8 +445,8 @@ type GraphSummaryResponse struct {
 
 type GraphNode struct {
 	ID   uuid.UUID `json:"id"`
-	Type string    `json:"type"` // "subject", "subject-set", "object", "object-set"
-	Name string    `json:"name,omitempty"`
+	Type string    `json:"type"` // "subject", "subject-attribute", "object", "object-attribute"
+	Name string `json:"name,omitempty"`
 }
 
 type GraphEdge struct {
@@ -457,9 +468,9 @@ type GraphSearchResponse struct {
 type PolicyBundle struct {
 	Revision      int64          `json:"revision"`
 	Subjects      []Subject      `json:"subjects"`
-	SubjectSets   []SubjectSet   `json:"subject_sets"`
-	Objects       []Object       `json:"objects"`
-	ObjectSets    []ObjectSet    `json:"object_sets"`
+	SubjectAttributes []SubjectAttribute `json:"subject_attributes"`
+	Objects           []Object           `json:"objects"`
+	ObjectAttributes  []ObjectAttribute  `json:"object_attributes"`
 	Relationships []Relationship `json:"relationships"`
 	Rules         []Rule         `json:"rules"`
 	Denies        []Deny         `json:"denies"`

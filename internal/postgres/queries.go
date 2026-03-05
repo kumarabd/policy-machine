@@ -8,30 +8,47 @@ import (
 	"gorm.io/gorm"
 )
 
-// ListSubjects returns paginated list of subjects
-func (h *Handler) ListSubjects(ctx context.Context, tenantID string, query string, limit int, cursor string) ([]Subject, string, bool, error) {
+// ListSubjects returns paginated list of subjects with optional attribute filtering
+// attributeFilters: list of attribute IDs to filter by (subjects must be assigned to at least one of these)
+func (h *Handler) ListSubjects(ctx context.Context, tenantID string, query string, limit int, cursor string, attributeFilters []string) ([]Subject, string, bool, error) {
 	if limit <= 0 || limit > 1000 {
 		limit = 50
 	}
 
-	db := h.H.WithContext(ctx).Model(&Subject{}).Where("tenant_id = ?", tenantID)
+	db := h.H.WithContext(ctx).Model(&Subject{}).Where("subjects.tenant_id = ?", tenantID)
 
 	// Apply search query
 	if query != "" {
 		search := "%" + query + "%"
-		db = db.Where("external_id ILIKE ? OR email ILIKE ? OR display ILIKE ?", search, search, search)
+		db = db.Where("subjects.external_id ILIKE ? OR subjects.email ILIKE ? OR subjects.display ILIKE ?", search, search, search)
+	}
+
+	// Apply attribute filters - subjects must be assigned to at least one of the specified attributes
+	if len(attributeFilters) > 0 {
+		var attributeIDs []uuid.UUID
+		for _, attrIDStr := range attributeFilters {
+			if attrID, err := uuid.Parse(attrIDStr); err == nil {
+				attributeIDs = append(attributeIDs, attrID)
+			}
+		}
+		if len(attributeIDs) > 0 {
+			db = db.Joins("INNER JOIN assignment_edges ON subjects.id = assignment_edges.child_id").
+				Where("assignment_edges.tenant_id = ? AND assignment_edges.child_type = ? AND assignment_edges.parent_type = ? AND assignment_edges.parent_id IN ?",
+					tenantID, NodeSubject, NodeUA, attributeIDs).
+				Group("subjects.id")
+		}
 	}
 
 	// Apply cursor (simple: use ID > cursor)
 	if cursor != "" {
 		cursorID, err := uuid.Parse(cursor)
 		if err == nil {
-			db = db.Where("id > ?", cursorID)
+			db = db.Where("subjects.id > ?", cursorID)
 		}
 	}
 
 	var subjects []Subject
-	err := db.Order("id ASC").Limit(limit + 1).Find(&subjects).Error
+	err := db.Order("subjects.id ASC").Limit(limit + 1).Find(&subjects).Error
 	if err != nil {
 		return nil, "", false, err
 	}
@@ -104,13 +121,17 @@ func (h *Handler) DeleteSubject(ctx context.Context, tenantID string, subjectID 
 	})
 }
 
-// ListSubjectSets returns paginated list of subject attributes
+// ListSubjectSets returns paginated list of subject attributes with attribute_type="custom".
+// "Subject set" is API terminology - this returns SubjectAttributes where attribute_type="custom".
+// Native/system attributes (attribute_type="native") are excluded from subject sets.
 func (h *Handler) ListSubjectSets(ctx context.Context, tenantID string, query string, limit int, cursor string) ([]SubjectAttribute, string, bool, error) {
 	if limit <= 0 || limit > 1000 {
 		limit = 50
 	}
 
-	db := h.H.WithContext(ctx).Model(&SubjectAttribute{}).Where("tenant_id = ?", tenantID)
+	// Only return custom attributes (subject sets should not include native/system attributes)
+	db := h.H.WithContext(ctx).Model(&SubjectAttribute{}).
+		Where("tenant_id = ? AND attribute_type = ?", tenantID, AttributeTypeCustom)
 
 	if query != "" {
 		search := "%" + query + "%"
@@ -143,7 +164,8 @@ func (h *Handler) ListSubjectSets(ctx context.Context, tenantID string, query st
 	return uas, nextCursor, hasMore, nil
 }
 
-// GetSubjectSet returns a subject attribute by ID
+// GetSubjectSet returns a subject attribute by ID.
+// Note: This can return any attribute (custom or native) - the API endpoint should validate attribute_type="custom" if needed.
 func (h *Handler) GetSubjectSet(ctx context.Context, tenantID string, uaID uuid.UUID) (*SubjectAttribute, error) {
 	var ua SubjectAttribute
 	err := h.H.WithContext(ctx).
@@ -156,7 +178,8 @@ func (h *Handler) GetSubjectSet(ctx context.Context, tenantID string, uaID uuid.
 	return &ua, nil
 }
 
-// GetSubjectSetMembers returns all subject IDs that are members of a subject set
+// GetSubjectSetMembers returns all subject IDs that are members of a subject attribute.
+// Works for both custom and native attributes.
 func (h *Handler) GetSubjectSetMembers(ctx context.Context, tenantID string, uaID uuid.UUID) ([]uuid.UUID, error) {
 	var edges []AssignmentEdge
 	err := h.H.WithContext(ctx).
@@ -174,7 +197,152 @@ func (h *Handler) GetSubjectSetMembers(ctx context.Context, tenantID string, uaI
 	return memberIDs, nil
 }
 
-// UpdateSubjectSet updates a subject attribute
+// GetSubjectAttributes returns all attributes (both native and custom) assigned to a subject
+// This queries assignment edges where the subject is the child and UA (subject attribute) is the parent
+func (h *Handler) GetSubjectAttributes(ctx context.Context, tenantID string, subjectID uuid.UUID) ([]SubjectAttribute, error) {
+	var attributes []SubjectAttribute
+	err := h.H.WithContext(ctx).
+		Table("subject_attributes").
+		Joins("INNER JOIN assignment_edges ON subject_attributes.id = assignment_edges.parent_id").
+		Where("assignment_edges.tenant_id = ? AND assignment_edges.child_type = ? AND assignment_edges.child_id = ? AND assignment_edges.parent_type = ?",
+			tenantID, NodeSubject, subjectID, NodeUA).
+		Find(&attributes).Error
+	if err != nil {
+		return nil, err
+	}
+	return attributes, nil
+}
+
+// GetSubjectAttributeSubgraph returns the complete attribute tree for a subject,
+// where the subject is the root node and attributes are child nodes.
+// Returns attributes (nodes) and their hierarchical relationships (edges), including subject->UA edges.
+func (h *Handler) GetSubjectAttributeSubgraph(ctx context.Context, tenantID string, subjectID uuid.UUID) ([]SubjectAttribute, []AssignmentEdge, error) {
+	// Step 1: Get direct edges (subject -> UA) and include them in the result
+	var directEdges []AssignmentEdge
+	err := h.H.WithContext(ctx).
+		Model(&AssignmentEdge{}).
+		Where("tenant_id = ? AND child_type = ? AND child_id = ? AND parent_type = ?",
+			tenantID, NodeSubject, subjectID, NodeUA).
+		Find(&directEdges).Error
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// Step 2: Collect all attribute IDs from direct edges
+	attributeIDs := make(map[uuid.UUID]bool)
+	for _, edge := range directEdges {
+		attributeIDs[edge.ParentID] = true
+	}
+
+	// Step 3: Recursively find all descendant attributes via UA->UA edges (downward only)
+	// We use a queue-based BFS approach, traversing only downward (children)
+	queue := make([]uuid.UUID, 0, len(attributeIDs))
+	for id := range attributeIDs {
+		queue = append(queue, id)
+	}
+
+	var allEdges []AssignmentEdge
+	allEdges = append(allEdges, directEdges...) // Include subject->UA edges
+	visited := make(map[uuid.UUID]bool)
+
+	for len(queue) > 0 {
+		currentID := queue[0]
+		queue = queue[1:]
+
+		if visited[currentID] {
+			continue
+		}
+		visited[currentID] = true
+
+		// Find all child UA nodes (children in the hierarchy) - downward traversal only
+		var childEdges []AssignmentEdge
+		err := h.H.WithContext(ctx).
+			Model(&AssignmentEdge{}).
+			Where("tenant_id = ? AND parent_id = ? AND child_type = ? AND parent_type = ?",
+				tenantID, currentID, NodeUA, NodeUA).
+			Find(&childEdges).Error
+		if err != nil {
+			return nil, nil, err
+		}
+
+		allEdges = append(allEdges, childEdges...)
+		for _, edge := range childEdges {
+			if !attributeIDs[edge.ChildID] {
+				attributeIDs[edge.ChildID] = true
+				queue = append(queue, edge.ChildID)
+			}
+		}
+	}
+
+	// Step 4: Fetch all attribute details
+	if len(attributeIDs) == 0 {
+		return []SubjectAttribute{}, allEdges, nil
+	}
+
+	idsList := make([]uuid.UUID, 0, len(attributeIDs))
+	for id := range attributeIDs {
+		idsList = append(idsList, id)
+	}
+
+	var allAttributes []SubjectAttribute
+	err = h.H.WithContext(ctx).
+		Model(&SubjectAttribute{}).
+		Where("tenant_id = ? AND id IN ?", tenantID, idsList).
+		Find(&allAttributes).Error
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return allAttributes, allEdges, nil
+}
+
+// ListSubjectAttributes returns all subject attributes (both native and custom)
+func (h *Handler) ListSubjectAttributes(ctx context.Context, tenantID string, query string, limit int, cursor string) ([]SubjectAttribute, string, bool, error) {
+	if limit <= 0 || limit > 1000 {
+		limit = 50
+	}
+
+	// Return all attributes (both native and custom)
+	db := h.H.WithContext(ctx).Model(&SubjectAttribute{}).
+		Where("tenant_id = ?", tenantID)
+
+	if query != "" {
+		search := "%" + query + "%"
+		db = db.Where("name ILIKE ?", search)
+	}
+
+	if cursor != "" {
+		cursorID, err := uuid.Parse(cursor)
+		if err == nil {
+			db = db.Where("id > ?", cursorID)
+		}
+	}
+
+	var uas []SubjectAttribute
+	err := db.Order("id ASC").Limit(limit + 1).Find(&uas).Error
+	if err != nil {
+		return nil, "", false, err
+	}
+
+	hasMore := len(uas) > limit
+	if hasMore {
+		uas = uas[:limit]
+	}
+
+	nextCursor := ""
+	if len(uas) > 0 {
+		nextCursor = uas[len(uas)-1].ID.String()
+	}
+
+	return uas, nextCursor, hasMore, nil
+}
+
+// GetSubjectAttribute returns a subject attribute by ID (alias for GetSubjectSet)
+func (h *Handler) GetSubjectAttribute(ctx context.Context, tenantID string, uaID uuid.UUID) (*SubjectAttribute, error) {
+	return h.GetSubjectSet(ctx, tenantID, uaID)
+}
+
+// UpdateSubjectSet updates a subject attribute (typically used for custom attributes via subject-sets API).
 func (h *Handler) UpdateSubjectSet(ctx context.Context, tenantID string, uaID uuid.UUID, name string) (int64, error) {
 	return h.WithPolicyWriteTx(ctx, tenantID, func(tx *gorm.DB) error {
 		result := tx.Model(&SubjectAttribute{}).
@@ -196,7 +364,7 @@ func (h *Handler) UpdateSubjectSet(ctx context.Context, tenantID string, uaID uu
 	})
 }
 
-// DeleteSubjectSet deletes a subject attribute
+// DeleteSubjectSet deletes a subject attribute (typically used for custom attributes via subject-sets API).
 func (h *Handler) DeleteSubjectSet(ctx context.Context, tenantID string, uaID uuid.UUID) (int64, error) {
 	return h.WithPolicyWriteTx(ctx, tenantID, func(tx *gorm.DB) error {
 		var ua SubjectAttribute
@@ -216,28 +384,45 @@ func (h *Handler) DeleteSubjectSet(ctx context.Context, tenantID string, uaID uu
 	})
 }
 
-// ListObjects returns paginated list of objects
-func (h *Handler) ListObjects(ctx context.Context, tenantID string, query string, limit int, cursor string) ([]Object, string, bool, error) {
+// ListObjects returns paginated list of objects with optional attribute filtering
+// attributeFilters: list of attribute IDs to filter by (objects must be assigned to at least one of these)
+func (h *Handler) ListObjects(ctx context.Context, tenantID string, query string, limit int, cursor string, attributeFilters []string) ([]Object, string, bool, error) {
 	if limit <= 0 || limit > 1000 {
 		limit = 50
 	}
 
-	db := h.H.WithContext(ctx).Model(&Object{}).Where("tenant_id = ?", tenantID)
+	db := h.H.WithContext(ctx).Model(&Object{}).Where("objects.tenant_id = ?", tenantID)
 
 	if query != "" {
 		search := "%" + query + "%"
-		db = db.Where("external_id ILIKE ? OR type ILIKE ?", search, search)
+		db = db.Where("objects.external_id ILIKE ? OR objects.attribute_type ILIKE ? OR objects.display_name ILIKE ?", search, search, search)
+	}
+
+	// Apply attribute filters - objects must be assigned to at least one of the specified attributes
+	if len(attributeFilters) > 0 {
+		var attributeIDs []uuid.UUID
+		for _, attrIDStr := range attributeFilters {
+			if attrID, err := uuid.Parse(attrIDStr); err == nil {
+				attributeIDs = append(attributeIDs, attrID)
+			}
+		}
+		if len(attributeIDs) > 0 {
+			db = db.Joins("INNER JOIN assignment_edges ON objects.id = assignment_edges.child_id").
+				Where("assignment_edges.tenant_id = ? AND assignment_edges.child_type = ? AND assignment_edges.parent_type = ? AND assignment_edges.parent_id IN ?",
+					tenantID, NodeObject, NodeOA, attributeIDs).
+				Group("objects.id")
+		}
 	}
 
 	if cursor != "" {
 		cursorID, err := uuid.Parse(cursor)
 		if err == nil {
-			db = db.Where("id > ?", cursorID)
+			db = db.Where("objects.id > ?", cursorID)
 		}
 	}
 
 	var objects []Object
-	err := db.Order("id ASC").Limit(limit + 1).Find(&objects).Error
+	err := db.Order("objects.id ASC").Limit(limit + 1).Find(&objects).Error
 	if err != nil {
 		return nil, "", false, err
 	}
@@ -310,13 +495,17 @@ func (h *Handler) DeleteObject(ctx context.Context, tenantID string, objectID uu
 	})
 }
 
-// ListObjectSets returns paginated list of object attributes
+// ListObjectSets returns paginated list of object attributes with attribute_type="custom".
+// "Object set" is API terminology - this returns ObjectAttributes where attribute_type="custom".
+// Native/system attributes (attribute_type="native") are excluded from object sets.
 func (h *Handler) ListObjectSets(ctx context.Context, tenantID string, query string, limit int, cursor string) ([]ObjectAttribute, string, bool, error) {
 	if limit <= 0 || limit > 1000 {
 		limit = 50
 	}
 
-	db := h.H.WithContext(ctx).Model(&ObjectAttribute{}).Where("tenant_id = ?", tenantID)
+	// Only return custom attributes (object sets should not include native/system attributes)
+	db := h.H.WithContext(ctx).Model(&ObjectAttribute{}).
+		Where("tenant_id = ? AND attribute_type = ?", tenantID, AttributeTypeCustom)
 
 	if query != "" {
 		search := "%" + query + "%"
@@ -349,7 +538,8 @@ func (h *Handler) ListObjectSets(ctx context.Context, tenantID string, query str
 	return oas, nextCursor, hasMore, nil
 }
 
-// GetObjectSet returns an object attribute by ID
+// GetObjectSet returns an object attribute by ID.
+// Note: This can return any attribute (custom or native) - the API endpoint should validate attribute_type="custom" if needed.
 func (h *Handler) GetObjectSet(ctx context.Context, tenantID string, oaID uuid.UUID) (*ObjectAttribute, error) {
 	var oa ObjectAttribute
 	err := h.H.WithContext(ctx).
@@ -362,7 +552,8 @@ func (h *Handler) GetObjectSet(ctx context.Context, tenantID string, oaID uuid.U
 	return &oa, nil
 }
 
-// GetObjectSetMembers returns all object IDs that are members of an object set
+// GetObjectSetMembers returns all object IDs that are members of an object attribute.
+// Works for both custom and native attributes.
 func (h *Handler) GetObjectSetMembers(ctx context.Context, tenantID string, oaID uuid.UUID) ([]uuid.UUID, error) {
 	var edges []AssignmentEdge
 	err := h.H.WithContext(ctx).
@@ -380,7 +571,121 @@ func (h *Handler) GetObjectSetMembers(ctx context.Context, tenantID string, oaID
 	return memberIDs, nil
 }
 
-// UpdateObjectSet updates an object attribute
+// GetObjectAttributes returns all attributes (both native and custom) assigned to an object
+// This is used for the object detail page to show all attributes
+func (h *Handler) GetObjectAttributes(ctx context.Context, tenantID string, objectID uuid.UUID) ([]ObjectAttribute, error) {
+	var attributes []ObjectAttribute
+	err := h.H.WithContext(ctx).
+		Table("object_attributes").
+		Joins("INNER JOIN assignment_edges ON object_attributes.id = assignment_edges.parent_id").
+		Where("assignment_edges.tenant_id = ? AND assignment_edges.child_type = ? AND assignment_edges.child_id = ? AND assignment_edges.parent_type = ?",
+			tenantID, NodeObject, objectID, NodeOA).
+		Find(&attributes).Error
+	if err != nil {
+		return nil, err
+	}
+	return attributes, nil
+}
+
+// GetObjectAttributeSubgraph returns the complete attribute tree for an object,
+// where the object is the root node and attributes are child nodes.
+// Returns attributes (nodes) and their hierarchical relationships (edges), including object->OA edges.
+func (h *Handler) GetObjectAttributeSubgraph(ctx context.Context, tenantID string, objectID uuid.UUID) ([]ObjectAttribute, []AssignmentEdge, error) {
+	// Step 1: Get direct edges (object -> OA) and include them in the result
+	var directEdges []AssignmentEdge
+	err := h.H.WithContext(ctx).
+		Model(&AssignmentEdge{}).
+		Where("tenant_id = ? AND child_type = ? AND child_id = ? AND parent_type = ?",
+			tenantID, NodeObject, objectID, NodeOA).
+		Find(&directEdges).Error
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// Step 2: Collect all attribute IDs from direct edges
+	attributeIDs := make(map[uuid.UUID]bool)
+	for _, edge := range directEdges {
+		attributeIDs[edge.ParentID] = true
+	}
+
+	// Step 3: Recursively find all descendant attributes via OA->OA edges (downward only)
+	// We use a queue-based BFS approach, traversing only downward (children)
+	queue := make([]uuid.UUID, 0, len(attributeIDs))
+	for id := range attributeIDs {
+		queue = append(queue, id)
+	}
+
+	var allEdges []AssignmentEdge
+	allEdges = append(allEdges, directEdges...) // Include object->OA edges
+	visited := make(map[uuid.UUID]bool)
+
+	for len(queue) > 0 {
+		currentID := queue[0]
+		queue = queue[1:]
+
+		if visited[currentID] {
+			continue
+		}
+		visited[currentID] = true
+
+		// Find all child OA nodes (children in the hierarchy) - downward traversal only
+		var childEdges []AssignmentEdge
+		err := h.H.WithContext(ctx).
+			Model(&AssignmentEdge{}).
+			Where("tenant_id = ? AND parent_id = ? AND child_type = ? AND parent_type = ?",
+				tenantID, currentID, NodeOA, NodeOA).
+			Find(&childEdges).Error
+		if err != nil {
+			return nil, nil, err
+		}
+
+		allEdges = append(allEdges, childEdges...)
+		for _, edge := range childEdges {
+			if !attributeIDs[edge.ChildID] {
+				attributeIDs[edge.ChildID] = true
+				queue = append(queue, edge.ChildID)
+			}
+		}
+	}
+
+	// Step 4: Fetch all attribute details
+	if len(attributeIDs) == 0 {
+		return []ObjectAttribute{}, allEdges, nil
+	}
+
+	idsList := make([]uuid.UUID, 0, len(attributeIDs))
+	for id := range attributeIDs {
+		idsList = append(idsList, id)
+	}
+
+	var allAttributes []ObjectAttribute
+	err = h.H.WithContext(ctx).
+		Model(&ObjectAttribute{}).
+		Where("tenant_id = ? AND id IN ?", tenantID, idsList).
+		Find(&allAttributes).Error
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return allAttributes, allEdges, nil
+}
+
+// GetAvailableObjectAttributes returns all available attributes (both native and custom) for filtering
+// This is used to populate filter options on the object list page
+func (h *Handler) GetAvailableObjectAttributes(ctx context.Context, tenantID string) ([]ObjectAttribute, error) {
+	var attributes []ObjectAttribute
+	err := h.H.WithContext(ctx).
+		Model(&ObjectAttribute{}).
+		Where("tenant_id = ?", tenantID).
+		Order("attribute_type ASC, name ASC").
+		Find(&attributes).Error
+	if err != nil {
+		return nil, err
+	}
+	return attributes, nil
+}
+
+// UpdateObjectSet updates an object attribute (typically used for custom attributes via object-sets API).
 func (h *Handler) UpdateObjectSet(ctx context.Context, tenantID string, oaID uuid.UUID, name string) (int64, error) {
 	return h.WithPolicyWriteTx(ctx, tenantID, func(tx *gorm.DB) error {
 		result := tx.Model(&ObjectAttribute{}).
@@ -402,7 +707,53 @@ func (h *Handler) UpdateObjectSet(ctx context.Context, tenantID string, oaID uui
 	})
 }
 
-// DeleteObjectSet deletes an object attribute
+// ListObjectAttributes returns all object attributes (both native and custom)
+func (h *Handler) ListObjectAttributes(ctx context.Context, tenantID string, query string, limit int, cursor string) ([]ObjectAttribute, string, bool, error) {
+	if limit <= 0 || limit > 1000 {
+		limit = 50
+	}
+
+	// Return all attributes (both native and custom)
+	db := h.H.WithContext(ctx).Model(&ObjectAttribute{}).
+		Where("tenant_id = ?", tenantID)
+
+	if query != "" {
+		search := "%" + query + "%"
+		db = db.Where("name ILIKE ?", search)
+	}
+
+	if cursor != "" {
+		cursorID, err := uuid.Parse(cursor)
+		if err == nil {
+			db = db.Where("id > ?", cursorID)
+		}
+	}
+
+	var oas []ObjectAttribute
+	err := db.Order("id ASC").Limit(limit + 1).Find(&oas).Error
+	if err != nil {
+		return nil, "", false, err
+	}
+
+	hasMore := len(oas) > limit
+	if hasMore {
+		oas = oas[:limit]
+	}
+
+	nextCursor := ""
+	if len(oas) > 0 {
+		nextCursor = oas[len(oas)-1].ID.String()
+	}
+
+	return oas, nextCursor, hasMore, nil
+}
+
+// GetObjectAttribute returns an object attribute by ID (alias for GetObjectSet)
+func (h *Handler) GetObjectAttribute(ctx context.Context, tenantID string, oaID uuid.UUID) (*ObjectAttribute, error) {
+	return h.GetObjectSet(ctx, tenantID, oaID)
+}
+
+// DeleteObjectSet deletes an object attribute (typically used for custom attributes via object-sets API).
 func (h *Handler) DeleteObjectSet(ctx context.Context, tenantID string, oaID uuid.UUID) (int64, error) {
 	return h.WithPolicyWriteTx(ctx, tenantID, func(tx *gorm.DB) error {
 		var oa ObjectAttribute
@@ -422,27 +773,27 @@ func (h *Handler) DeleteObjectSet(ctx context.Context, tenantID string, oaID uui
 	})
 }
 
-// MapRelationshipKindToEdgeTypes converts UI relationship kind to NGAC edge types
+// MapRelationshipKindToEdgeTypes converts relationship API type names to NGAC edge types.
 func MapRelationshipKindToEdgeTypes(kind string, fromType, toType string) (childType, parentType NodeType, err error) {
 	switch kind {
-	case "subject_member_of_set", "subject_member_of_group":
-		if fromType != "subject" || (toType != "subject-set" && toType != "subject-group") {
-			return "", "", fmt.Errorf("invalid types for subject_member_of_set")
+	case "subject_member_of_set", "subject_member_of_group", "subject_member_of_attribute":
+		if fromType != "subject" || (toType != "subject-attribute" && toType != "subject-group") {
+			return "", "", fmt.Errorf("invalid types for subject_member_of_set: from must be 'subject', to must be 'subject-attribute' or 'subject-group'")
 		}
 		return NodeSubject, NodeUA, nil
-	case "subject_set_parent_of_set", "subject_group_parent_of_group":
-		if (fromType != "subject-set" && fromType != "subject-group") || (toType != "subject-set" && toType != "subject-group") {
-			return "", "", fmt.Errorf("invalid types for subject_set_parent_of_set")
+	case "subject_set_parent_of_set", "subject_group_parent_of_group", "subject_attribute_parent_of_attribute":
+		if (fromType != "subject-attribute" && fromType != "subject-group") || (toType != "subject-attribute" && toType != "subject-group") {
+			return "", "", fmt.Errorf("invalid types for subject_set_parent_of_set: both from and to must be 'subject-attribute' or 'subject-group'")
 		}
 		return NodeUA, NodeUA, nil
-	case "object_member_of_set", "object_member_of_group":
-		if fromType != "object" || (toType != "object-set" && toType != "object-group") {
-			return "", "", fmt.Errorf("invalid types for object_member_of_set")
+	case "object_member_of_set", "object_member_of_group", "object_member_of_attribute":
+		if fromType != "object" || (toType != "object-attribute" && toType != "object-group") {
+			return "", "", fmt.Errorf("invalid types for object_member_of_set: from must be 'object', to must be 'object-attribute' or 'object-group'")
 		}
 		return NodeObject, NodeOA, nil
-	case "object_set_parent_of_set", "object_group_parent_of_group":
-		if (fromType != "object-set" && fromType != "object-group") || (toType != "object-set" && toType != "object-group") {
-			return "", "", fmt.Errorf("invalid types for object_set_parent_of_set")
+	case "object_set_parent_of_set", "object_group_parent_of_group", "object_attribute_parent_of_attribute":
+		if (fromType != "object-attribute" && fromType != "object-group") || (toType != "object-attribute" && toType != "object-group") {
+			return "", "", fmt.Errorf("invalid types for object_set_parent_of_set: both from and to must be 'object-attribute' or 'object-group'")
 		}
 		return NodeOA, NodeOA, nil
 	default:
@@ -462,28 +813,28 @@ func (h *Handler) ListRelationships(ctx context.Context, tenantID string, filter
 	if kind, ok := filters["kind"].(string); ok && kind != "" {
 		// Filter by child/parent type based on kind
 		switch kind {
-		case "subject_member_of_set", "subject_member_of_group":
+		case "subject_member_of_set", "subject_member_of_group", "subject_member_of_attribute":
 			db = db.Where("child_type = ? AND parent_type = ?", NodeSubject, NodeUA)
-		case "subject_set_parent_of_set", "subject_group_parent_of_group":
+		case "subject_set_parent_of_set", "subject_group_parent_of_group", "subject_attribute_parent_of_attribute":
 			db = db.Where("child_type = ? AND parent_type = ?", NodeUA, NodeUA)
-		case "object_member_of_set", "object_member_of_group":
+		case "object_member_of_set", "object_member_of_group", "object_member_of_attribute":
 			db = db.Where("child_type = ? AND parent_type = ?", NodeObject, NodeOA)
-		case "object_set_parent_of_set", "object_group_parent_of_group":
+		case "object_set_parent_of_set", "object_group_parent_of_group", "object_attribute_parent_of_attribute":
 			db = db.Where("child_type = ? AND parent_type = ?", NodeOA, NodeOA)
 		}
 	}
 
 	if fromType, ok := filters["from_type"].(string); ok && fromType != "" {
-		// Map UI type to NodeType
+		// Map relationship API type to NodeType
 		var nodeType NodeType
 		switch fromType {
 		case "subject":
 			nodeType = NodeSubject
-		case "subject-group":
+		case "subject-attribute", "subject-group":
 			nodeType = NodeUA
 		case "object":
 			nodeType = NodeObject
-		case "object-set", "object-group":
+		case "object-attribute", "object-group":
 			nodeType = NodeOA
 		default:
 			nodeType = NodeType(fromType)
@@ -496,11 +847,12 @@ func (h *Handler) ListRelationships(ctx context.Context, tenantID string, filter
 	}
 
 	if toType, ok := filters["to_type"].(string); ok && toType != "" {
+		// Map relationship API type to NodeType
 		var nodeType NodeType
 		switch toType {
-		case "subject-set", "subject-group":
+		case "subject-attribute", "subject-group":
 			nodeType = NodeUA
-		case "object-set", "object-group":
+		case "object-attribute", "object-group":
 			nodeType = NodeOA
 		default:
 			nodeType = NodeType(toType)
@@ -546,13 +898,15 @@ func (h *Handler) ListRules(ctx context.Context, tenantID string, filters map[st
 
 	db := h.H.WithContext(ctx).Model(&Association{}).Where("tenant_id = ?", tenantID)
 
-	// Apply filters
-	if uaID, ok := filters["subject_scope_id"].(uuid.UUID); ok && uaID != uuid.Nil {
-		db = db.Where("subject_attribute_id = ?", uaID)
+	// Apply filters - support both subject/subject-set and object/object-set
+	if subjectID, ok := filters["subject_scope_id"].(uuid.UUID); ok && subjectID != uuid.Nil {
+		// Filter by either subject_id or subject_attribute_id
+		db = db.Where("(subject_id = ? OR subject_attribute_id = ?)", subjectID, subjectID)
 	}
 
-	if oaID, ok := filters["object_scope_id"].(uuid.UUID); ok && oaID != uuid.Nil {
-		db = db.Where("object_attribute_id = ?", oaID)
+	if objectID, ok := filters["object_scope_id"].(uuid.UUID); ok && objectID != uuid.Nil {
+		// Filter by either object_id or object_attribute_id
+		db = db.Where("(object_id = ? OR object_attribute_id = ?)", objectID, objectID)
 	}
 
 	if cursor != "" {
@@ -593,13 +947,38 @@ func (h *Handler) ListRules(ctx context.Context, tenantID string, filters map[st
 	// Build result with operations
 	results := make([]map[string]interface{}, len(assocs))
 	for i, a := range assocs {
-		results[i] = map[string]interface{}{
+		result := map[string]interface{}{
 			"id":         a.ID,
-			"ua_id":      a.SubjectAttributeID,
-			"oa_id":      a.ObjectAttributeID,
 			"operations": opsMap[a.ID],
 			"created_at": a.CreatedAt,
 		}
+		// Set subject side - exactly one must be set
+		// Note: "subject-set" is API terminology only for the /api/v1/subject-sets endpoint.
+		// In rules API, we use "subject-attribute" to refer to SubjectAttribute entities.
+		if a.SubjectID != nil {
+			result["subject_type"] = "subject"
+			result["subject_id"] = *a.SubjectID
+		} else if a.SubjectAttributeID != nil {
+			result["subject_type"] = "subject-attribute"
+			result["subject_id"] = *a.SubjectAttributeID
+		} else {
+			// Invalid state - skip this association
+			continue
+		}
+		// Set object side - exactly one must be set
+		// Note: "object-set" is API terminology only for the /api/v1/object-sets endpoint.
+		// In rules API, we use "object-attribute" to refer to ObjectAttribute entities.
+		if a.ObjectID != nil {
+			result["object_type"] = "object"
+			result["object_id"] = *a.ObjectID
+		} else if a.ObjectAttributeID != nil {
+			result["object_type"] = "object-attribute"
+			result["object_id"] = *a.ObjectAttributeID
+		} else {
+			// Invalid state - skip this association
+			continue
+		}
+		results[i] = result
 	}
 
 	nextCursor := ""
@@ -633,6 +1012,31 @@ func (h *Handler) GetRule(ctx context.Context, tenantID string, assocID uuid.UUI
 	}
 
 	return &assoc, operations, nil
+}
+
+// GetRuleSubjectType returns the type and ID of the subject side of a rule
+// GetSubjectType returns the type and ID of the subject side of a rule.
+// Note: "subject-set" is API terminology only for the /api/v1/subject-sets endpoint.
+// In rules API, we use "subject-attribute" to refer to SubjectAttribute entities.
+func (a *Association) GetSubjectType() (string, uuid.UUID) {
+	if a.SubjectID != nil {
+		return "subject", *a.SubjectID
+	} else if a.SubjectAttributeID != nil {
+		return "subject-attribute", *a.SubjectAttributeID
+	}
+	return "", uuid.Nil
+}
+
+// GetObjectType returns the type and ID of the object side of a rule.
+// Note: "object-set" is API terminology only for the /api/v1/object-sets endpoint.
+// In rules API, we use "object-attribute" to refer to ObjectAttribute entities.
+func (a *Association) GetObjectType() (string, uuid.UUID) {
+	if a.ObjectID != nil {
+		return "object", *a.ObjectID
+	} else if a.ObjectAttributeID != nil {
+		return "object-attribute", *a.ObjectAttributeID
+	}
+	return "", uuid.Nil
 }
 
 // GetAssociationsByUAOA returns all associations matching UA->OA pairs for a given operation
@@ -678,12 +1082,17 @@ func (h *Handler) GetAssociationsByUAOA(ctx context.Context, tenantID string, ua
 	}
 
 	// Filter to only associations that match the UA->OA pairs
+	// This function is specifically for UA->OA associations used by the engine
 	filtered := []Association{}
 	for _, a := range assocs {
-		if oaIDs, ok := uaOAPairs[a.SubjectAttributeID]; ok {
+		// Only process UA->OA associations (both attribute IDs must be set)
+		if a.SubjectAttributeID == nil || a.ObjectAttributeID == nil {
+			continue
+		}
+		if oaIDs, ok := uaOAPairs[*a.SubjectAttributeID]; ok {
 			// Check if this association's OA is in the list
 			for _, oaID := range oaIDs {
-				if a.ObjectAttributeID == oaID {
+				if *a.ObjectAttributeID == oaID {
 					filtered = append(filtered, a)
 					break
 				}
@@ -1018,8 +1427,10 @@ func (h *Handler) GraphSearch(ctx context.Context, tenantID string, query string
 		}
 	}
 
-	// Search UAs
-	if len(types) == 0 || typeSet["subject-set"] || typeSet["subject-group"] {
+	// Search UAs (SubjectAttributes)
+	// Accept both "subject-set" (legacy) and "subject-attribute" (new) for backward compatibility
+	// But return "subject-attribute" in results for consistency
+	if len(types) == 0 || typeSet["subject-set"] || typeSet["subject-attribute"] || typeSet["subject-group"] {
 		var uas []SubjectAttribute
 		h.H.WithContext(ctx).
 			Model(&SubjectAttribute{}).
@@ -1029,7 +1440,7 @@ func (h *Handler) GraphSearch(ctx context.Context, tenantID string, query string
 		for _, ua := range uas {
 			results = append(results, map[string]interface{}{
 				"id":   ua.ID,
-				"type": "subject-set",
+				"type": "subject-attribute", // Use "subject-attribute" for consistency (not "subject-set")
 				"name": ua.Name,
 			})
 		}
@@ -1052,8 +1463,10 @@ func (h *Handler) GraphSearch(ctx context.Context, tenantID string, query string
 		}
 	}
 
-	// Search OAs
-	if len(types) == 0 || typeSet["object-set"] || typeSet["object-group"] {
+	// Search OAs (ObjectAttributes)
+	// Accept both "object-set" (legacy) and "object-attribute" (new) for backward compatibility
+	// But return "object-attribute" in results for consistency
+	if len(types) == 0 || typeSet["object-set"] || typeSet["object-attribute"] || typeSet["object-group"] {
 		var oas []ObjectAttribute
 		h.H.WithContext(ctx).
 			Model(&ObjectAttribute{}).
@@ -1063,7 +1476,7 @@ func (h *Handler) GraphSearch(ctx context.Context, tenantID string, query string
 		for _, oa := range oas {
 			results = append(results, map[string]interface{}{
 				"id":   oa.ID,
-				"type": "object-set",
+				"type": "object-attribute", // Use "object-attribute" for consistency (not "object-set")
 				"name": oa.Name,
 			})
 		}

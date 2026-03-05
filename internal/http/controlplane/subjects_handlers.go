@@ -7,29 +7,26 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/kumarabd/policy-machine/internal/api/mapper"
 	httputil "github.com/kumarabd/policy-machine/internal/http"
-	"github.com/kumarabd/policy-machine/internal/mock"
 	"github.com/kumarabd/policy-machine/internal/postgres"
 	"github.com/kumarabd/policy-machine/pkg/api"
+	"gorm.io/datatypes"
 	"gorm.io/gorm"
 )
 
 // ListSubjects returns paginated list of subjects
 // @Summary List subjects
-// @Description Returns paginated list of subjects
-// @Tags subjects
+// @Description Returns paginated list of subjects with optional filtering by attributes
+// @Tags generic
 // @Produce json
 // @Param query query string false "Search query"
 // @Param limit query int false "Page size (default: 50, max: 1000)"
 // @Param cursor query string false "Pagination cursor"
+// @Param attribute query string false "Filter by attribute ID (can be specified multiple times)"
 // @Success 200 {object} ListSubjectsResponse
 // @Router /api/v1/subjects [get]
 func (s *Server) ListSubjects(w http.ResponseWriter, r *http.Request) {
-	if httputil.IsMockMode(r.Context()) {
-		mock.ListSubjects(w, r)
-		return
-	}
-
 	tenantID, ok := httputil.GetTenantID(r.Context())
 	if !ok {
 		httputil.RespondError(w, http.StatusBadRequest, "MISSING_TENANT", "Tenant ID required")
@@ -45,29 +42,18 @@ func (s *Server) ListSubjects(w http.ResponseWriter, r *http.Request) {
 	}
 	cursor := r.URL.Query().Get("cursor")
 
-	subjectsList, nextCursor, hasMore, err := s.engine.GetDB().ListSubjects(r.Context(), tenantID, query, limit, cursor)
+	// Get attribute filters (can be multiple)
+	attributeFilters := r.URL.Query()["attribute"]
+
+	subjectsList, nextCursor, hasMore, err := s.engine.GetDB().ListSubjects(r.Context(), tenantID, query, limit, cursor, attributeFilters)
 	if err != nil {
 		httputil.RespondError(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return
 	}
 
 	subjects := make([]api.Subject, len(subjectsList))
-	for i, s := range subjectsList {
-		displayName := s.Display
-		if displayName == "" {
-			displayName = s.ExternalID
-		}
-		subjects[i] = api.Subject{
-			ID:          s.ID,
-			ExternalID:  s.ExternalID,
-			Email:       s.Email,
-			Display:     s.Display,
-			DisplayName: displayName,
-			Kind:        "subject",
-			Attributes:  make(map[string]string),
-			Tags:        []string{},
-			CreatedAt:   s.CreatedAt,
-		}
+	for i := range subjectsList {
+		subjects[i] = mapper.Subject(&subjectsList[i])
 	}
 
 	var nextCursorPtr *string
@@ -89,18 +75,13 @@ func (s *Server) ListSubjects(w http.ResponseWriter, r *http.Request) {
 // CreateSubject creates a new subject
 // @Summary Create subject
 // @Description Creates a new subject
-// @Tags subjects
+// @Tags generic
 // @Accept json
 // @Produce json
 // @Param request body api.CreateSubjectRequest true "Subject data"
 // @Success 201 {object} api.SubjectResponse
 // @Router /api/v1/subjects [post]
 func (s *Server) CreateSubject(w http.ResponseWriter, r *http.Request) {
-	if httputil.IsMockMode(r.Context()) {
-		mock.CreateSubject(w, r)
-		return
-	}
-
 	tenantID, ok := httputil.GetTenantID(r.Context())
 	if !ok {
 		httputil.RespondError(w, http.StatusBadRequest, "MISSING_TENANT", "Tenant ID required")
@@ -113,17 +94,15 @@ func (s *Server) CreateSubject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.ExternalID == "" {
-		httputil.RespondError(w, http.StatusBadRequest, "VALIDATION_ERROR", "external_id is required")
+	if req.Name == "" {
+		httputil.RespondError(w, http.StatusBadRequest, "VALIDATION_ERROR", "name is required")
 		return
 	}
 
-	subject := &postgres.Subject{
-		ExternalID: req.ExternalID,
-		Email:      req.Email,
-		Display:    req.Display,
+	subject := mapper.CreateSubjectRequestToPostgres(req)
+	if subject.Tags == nil {
+		subject.Tags = datatypes.JSON("{}")
 	}
-
 	revision, err := s.engine.GetDB().CreateSubject(r.Context(), tenantID, subject)
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
@@ -135,13 +114,7 @@ func (s *Server) CreateSubject(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response := api.SubjectResponse{
-		Subject: api.Subject{
-			ID:         subject.ID,
-			ExternalID: subject.ExternalID,
-			Email:      subject.Email,
-			Display:    subject.Display,
-			CreatedAt:  subject.CreatedAt,
-		},
+		Subject:  mapper.Subject(subject),
 		Revision: revision,
 	}
 
@@ -153,17 +126,12 @@ func (s *Server) CreateSubject(w http.ResponseWriter, r *http.Request) {
 // GetSubject returns a subject by ID
 // @Summary Get subject
 // @Description Returns a subject by ID
-// @Tags subjects
+// @Tags generic
 // @Produce json
 // @Param id path string true "Subject ID"
 // @Success 200 {object} Subject
 // @Router /api/v1/subjects/{id} [get]
 func (s *Server) GetSubject(w http.ResponseWriter, r *http.Request) {
-	if httputil.IsMockMode(r.Context()) {
-		mock.GetSubject(w, r)
-		return
-	}
-
 	tenantID, ok := httputil.GetTenantID(r.Context())
 	if !ok {
 		httputil.RespondError(w, http.StatusBadRequest, "MISSING_TENANT", "Tenant ID required")
@@ -187,20 +155,20 @@ func (s *Server) GetSubject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	displayName := subjectDB.Display
-	if displayName == "" {
-		displayName = subjectDB.ExternalID
+	// Get all attributes (both native and custom) assigned to this subject
+	attributes, err := s.engine.GetDB().GetSubjectAttributes(r.Context(), tenantID, id)
+	if err != nil {
+		// Log error but continue - attributes are optional
+		attributes = []postgres.SubjectAttribute{}
 	}
-	subject := api.Subject{
-		ID:          subjectDB.ID,
-		ExternalID:  subjectDB.ExternalID,
-		Email:       subjectDB.Email,
-		Display:     subjectDB.Display,
-		DisplayName: displayName,
-		Kind:        "subject",
-		Attributes:  make(map[string]string),
-		Tags:        []string{},
-		CreatedAt:   subjectDB.CreatedAt,
+
+	subject := mapper.Subject(subjectDB)
+	// Merge assigned attribute names into metadata
+	for _, attr := range attributes {
+		if subject.Metadata == nil {
+			subject.Metadata = make(map[string]string)
+		}
+		subject.Metadata["attr:"+attr.Name] = string(attr.AttributeType)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -210,7 +178,7 @@ func (s *Server) GetSubject(w http.ResponseWriter, r *http.Request) {
 // UpdateSubject updates a subject
 // @Summary Update subject
 // @Description Updates a subject
-// @Tags subjects
+// @Tags generic
 // @Accept json
 // @Produce json
 // @Param id path string true "Subject ID"
@@ -218,11 +186,6 @@ func (s *Server) GetSubject(w http.ResponseWriter, r *http.Request) {
 // @Success 200 {object} api.SubjectResponse
 // @Router /api/v1/subjects/{id} [patch]
 func (s *Server) UpdateSubject(w http.ResponseWriter, r *http.Request) {
-	if httputil.IsMockMode(r.Context()) {
-		mock.UpdateSubject(w, r)
-		return
-	}
-
 	tenantID, ok := httputil.GetTenantID(r.Context())
 	if !ok {
 		httputil.RespondError(w, http.StatusBadRequest, "MISSING_TENANT", "Tenant ID required")
@@ -243,11 +206,17 @@ func (s *Server) UpdateSubject(w http.ResponseWriter, r *http.Request) {
 	}
 
 	updates := make(map[string]interface{})
-	if req.Email != "" {
-		updates["email"] = req.Email
+	if req.Name != "" {
+		updates["external_id"] = req.Name
+		updates["display"] = req.Name
+		updates["display_name"] = req.Name
 	}
-	if req.Display != "" {
-		updates["display"] = req.Display
+	if req.Kind != "" {
+		updates["kind"] = req.Kind
+	}
+	if len(req.Metadata) > 0 {
+		tagsJSON, _ := json.Marshal(req.Metadata)
+		updates["tags"] = datatypes.JSON(tagsJSON)
 	}
 
 	if len(updates) == 0 {
@@ -268,22 +237,8 @@ func (s *Server) UpdateSubject(w http.ResponseWriter, r *http.Request) {
 	// Fetch updated subject
 	subjectDB, _ := s.engine.GetDB().GetSubject(r.Context(), tenantID, id)
 
-	displayName := subjectDB.Display
-	if displayName == "" {
-		displayName = subjectDB.ExternalID
-	}
 	response := api.SubjectResponse{
-		Subject: api.Subject{
-			ID:          subjectDB.ID,
-			ExternalID:  subjectDB.ExternalID,
-			Email:       subjectDB.Email,
-			Display:     subjectDB.Display,
-			DisplayName: displayName,
-			Kind:        "subject",
-			Attributes:  make(map[string]string),
-			Tags:        []string{},
-			CreatedAt:   subjectDB.CreatedAt,
-		},
+		Subject:  mapper.Subject(subjectDB),
 		Revision: revision,
 	}
 
@@ -294,16 +249,11 @@ func (s *Server) UpdateSubject(w http.ResponseWriter, r *http.Request) {
 // DeleteSubject deletes a subject
 // @Summary Delete subject
 // @Description Deletes a subject
-// @Tags subjects
+// @Tags generic
 // @Param id path string true "Subject ID"
 // @Success 204 "No Content"
 // @Router /api/v1/subjects/{id} [delete]
 func (s *Server) DeleteSubject(w http.ResponseWriter, r *http.Request) {
-	if httputil.IsMockMode(r.Context()) {
-		mock.DeleteSubject(w, r)
-		return
-	}
-
 	tenantID, ok := httputil.GetTenantID(r.Context())
 	if !ok {
 		httputil.RespondError(w, http.StatusBadRequest, "MISSING_TENANT", "Tenant ID required")
@@ -330,22 +280,17 @@ func (s *Server) DeleteSubject(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// ListSubjectSets returns paginated list of subject sets
-// @Summary List subject sets
-// @Description Returns paginated list of subject sets (UAs)
-// @Tags subject-sets
+// ListSubjectAttributesCustom returns paginated list of custom subject attributes (with members).
+// @Summary List custom subject attributes
+// @Description Returns paginated list of custom subject attributes with member IDs
+// @Tags generic
 // @Produce json
 // @Param query query string false "Search query"
 // @Param limit query int false "Page size"
 // @Param cursor query string false "Pagination cursor"
 // @Success 200 {object} SearchResponse
-// @Router /api/v1/subject-sets [get]
-func (s *Server) ListSubjectSets(w http.ResponseWriter, r *http.Request) {
-	if httputil.IsMockMode(r.Context()) {
-		mock.ListSubjectSets(w, r)
-		return
-	}
-
+// @Router /api/v1/subject-attributes/custom [get]
+func (s *Server) ListSubjectAttributesCustom(w http.ResponseWriter, r *http.Request) {
 	tenantID, ok := httputil.GetTenantID(r.Context())
 	if !ok {
 		httputil.RespondError(w, http.StatusBadRequest, "MISSING_TENANT", "Tenant ID required")
@@ -367,24 +312,9 @@ func (s *Server) ListSubjectSets(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	groups := make([]api.SubjectSet, len(uas))
-	for i, ua := range uas {
-		// Get member IDs for this subject set
-		memberIDs, err := s.engine.GetDB().GetSubjectSetMembers(r.Context(), tenantID, ua.ID)
-		if err != nil {
-			// Log error but continue with empty member list
-			memberIDs = []uuid.UUID{}
-		}
-		groups[i] = api.SubjectSet{
-			ID:               ua.ID,
-			Name:             ua.Name,
-			Description:      "",
-			ScopeID:          nil,
-			Tags:             []string{},
-			MemberSubjectIDs: memberIDs,
-			CreatedAt:        ua.CreatedAt,
-			UpdatedAt:        nil,
-		}
+	groups := make([]api.SubjectAttribute, len(uas))
+	for i := range uas {
+		groups[i] = mapper.SubjectAttribute(&uas[i])
 	}
 
 	var nextCursorPtr *string
@@ -393,7 +323,7 @@ func (s *Server) ListSubjectSets(w http.ResponseWriter, r *http.Request) {
 	}
 	total := len(groups)
 
-	response := api.SearchResponse[api.SubjectSet]{
+	response := api.SearchResponse[api.SubjectAttribute]{
 		Items:      groups,
 		NextCursor: nextCursorPtr,
 		Total:      &total,
@@ -403,28 +333,23 @@ func (s *Server) ListSubjectSets(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(response)
 }
 
-// CreateSubjectSet creates a new subject set
-// @Summary Create subject set
-// @Description Creates a new subject set (UA)
-// @Tags subject-sets
+// CreateSubjectAttributeCustom creates a new custom subject attribute.
+// @Summary Create custom subject attribute
+// @Description Creates a new custom subject attribute
+// @Tags generic
 // @Accept json
 // @Produce json
-// @Param request body CreateSubjectSetRequest true "Set data"
-// @Success 201 {object} api.SubjectSetResponse
-// @Router /api/v1/subject-sets [post]
-func (s *Server) CreateSubjectSet(w http.ResponseWriter, r *http.Request) {
-	if httputil.IsMockMode(r.Context()) {
-		mock.CreateSubjectSet(w, r)
-		return
-	}
-
+// @Param request body api.CreateSubjectAttributeRequest true "Attribute data"
+// @Success 201 {object} api.SubjectAttributeResponse
+// @Router /api/v1/subject-attributes/custom [post]
+func (s *Server) CreateSubjectAttributeCustom(w http.ResponseWriter, r *http.Request) {
 	tenantID, ok := httputil.GetTenantID(r.Context())
 	if !ok {
 		httputil.RespondError(w, http.StatusBadRequest, "MISSING_TENANT", "Tenant ID required")
 		return
 	}
 
-	var req httputil.CreateSubjectSetRequest
+	var req api.CreateSubjectAttributeRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		httputil.RespondError(w, http.StatusBadRequest, "INVALID_REQUEST", err.Error())
 		return
@@ -435,9 +360,7 @@ func (s *Server) CreateSubjectSet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ua := &postgres.SubjectAttribute{
-		Name: req.Name,
-	}
+	ua := mapper.CreateSubjectAttributeRequestToPostgres(req)
 
 	revision, err := s.engine.GetDB().CreateSubjectSet(r.Context(), tenantID, ua)
 	if err != nil {
@@ -445,13 +368,9 @@ func (s *Server) CreateSubjectSet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	response := api.SubjectSetResponse{
-		Group: api.SubjectSet{
-			ID:        ua.ID,
-			Name:      ua.Name,
-			CreatedAt: ua.CreatedAt,
-		},
-		Revision: revision,
+	response := api.SubjectAttributeResponse{
+		Attribute: mapper.SubjectAttribute(ua),
+		Revision:  revision,
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -459,20 +378,15 @@ func (s *Server) CreateSubjectSet(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(response)
 }
 
-// GetSubjectSet returns a subject set by ID
-// @Summary Get subject set
-// @Description Returns a subject set by ID
-// @Tags subject-sets
+// GetSubjectAttributeCustom returns a custom subject attribute by ID (with members).
+// @Summary Get custom subject attribute
+// @Description Returns a custom subject attribute by ID with member IDs
+// @Tags generic
 // @Produce json
-// @Param id path string true "Set ID"
-// @Success 200 {object} api.SubjectSet
-// @Router /api/v1/subject-sets/{id} [get]
-func (s *Server) GetSubjectSet(w http.ResponseWriter, r *http.Request) {
-	if httputil.IsMockMode(r.Context()) {
-		mock.GetSubjectSet(w, r)
-		return
-	}
-
+// @Param id path string true "Attribute ID"
+// @Success 200 {object} api.SubjectAttribute
+// @Router /api/v1/subject-attributes/custom/{id} [get]
+func (s *Server) GetSubjectAttributeCustom(w http.ResponseWriter, r *http.Request) {
 	tenantID, ok := httputil.GetTenantID(r.Context())
 	if !ok {
 		httputil.RespondError(w, http.StatusBadRequest, "MISSING_TENANT", "Tenant ID required")
@@ -482,58 +396,41 @@ func (s *Server) GetSubjectSet(w http.ResponseWriter, r *http.Request) {
 	idStr := chi.URLParam(r, "id")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
-		httputil.RespondError(w, http.StatusBadRequest, "INVALID_ID", "Invalid group ID")
+		httputil.RespondError(w, http.StatusBadRequest, "INVALID_ID", "Invalid attribute ID")
 		return
 	}
 
 	ua, err := s.engine.GetDB().GetSubjectSet(r.Context(), tenantID, id)
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
-			httputil.RespondError(w, http.StatusNotFound, "NOT_FOUND", "subject set not found")
+			httputil.RespondError(w, http.StatusNotFound, "NOT_FOUND", "subject attribute not found")
 			return
 		}
 		httputil.RespondError(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return
 	}
 
-	// Get member IDs from assignment edges
-	memberIDs, err := s.engine.GetDB().GetSubjectSetMembers(r.Context(), tenantID, id)
-	if err != nil {
-		httputil.RespondError(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
+	// Validate that this is a custom attribute
+	if ua.AttributeType != postgres.AttributeTypeCustom {
+		httputil.RespondError(w, http.StatusNotFound, "NOT_FOUND", "custom subject attribute not found")
 		return
-	}
-
-	group := api.SubjectSet{
-		ID:               ua.ID,
-		Name:             ua.Name,
-		Description:      "",
-		ScopeID:          nil,
-		Tags:             []string{},
-		MemberSubjectIDs: memberIDs,
-		CreatedAt:        ua.CreatedAt,
-		UpdatedAt:        &ua.UpdatedAt,
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(group)
+	json.NewEncoder(w).Encode(mapper.SubjectAttribute(ua))
 }
 
-// UpdateSubjectSet updates a subject set
-// @Summary Update subject set
-// @Description Updates a subject set
-// @Tags subject-sets
+// UpdateSubjectAttributeCustom updates a custom subject attribute.
+// @Summary Update custom subject attribute
+// @Description Updates a custom subject attribute
+// @Tags generic
 // @Accept json
 // @Produce json
 // @Param id path string true "Set ID"
-// @Param request body UpdateSubjectSetRequest true "Update data"
-// @Success 200 {object} api.SubjectSetResponse
-// @Router /api/v1/subject-sets/{id} [patch]
-func (s *Server) UpdateSubjectSet(w http.ResponseWriter, r *http.Request) {
-	if httputil.IsMockMode(r.Context()) {
-		mock.UpdateSubjectSet(w, r)
-		return
-	}
-
+// @Param request body api.UpdateSubjectAttributeRequest true "Update data"
+// @Success 200 {object} api.SubjectAttributeResponse
+// @Router /api/v1/subject-attributes/custom/{id} [patch]
+func (s *Server) UpdateSubjectAttributeCustom(w http.ResponseWriter, r *http.Request) {
 	tenantID, ok := httputil.GetTenantID(r.Context())
 	if !ok {
 		httputil.RespondError(w, http.StatusBadRequest, "MISSING_TENANT", "Tenant ID required")
@@ -543,11 +440,11 @@ func (s *Server) UpdateSubjectSet(w http.ResponseWriter, r *http.Request) {
 	idStr := chi.URLParam(r, "id")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
-		httputil.RespondError(w, http.StatusBadRequest, "INVALID_ID", "Invalid group ID")
+		httputil.RespondError(w, http.StatusBadRequest, "INVALID_ID", "Invalid attribute ID")
 		return
 	}
 
-	var req httputil.UpdateSubjectSetRequest
+	var req api.UpdateSubjectAttributeRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		httputil.RespondError(w, http.StatusBadRequest, "INVALID_REQUEST", err.Error())
 		return
@@ -561,7 +458,7 @@ func (s *Server) UpdateSubjectSet(w http.ResponseWriter, r *http.Request) {
 	revision, err := s.engine.GetDB().UpdateSubjectSet(r.Context(), tenantID, id, req.Name)
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
-			httputil.RespondError(w, http.StatusNotFound, "NOT_FOUND", "subject set not found")
+			httputil.RespondError(w, http.StatusNotFound, "NOT_FOUND", "subject attribute not found")
 			return
 		}
 		httputil.RespondError(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
@@ -570,32 +467,23 @@ func (s *Server) UpdateSubjectSet(w http.ResponseWriter, r *http.Request) {
 
 	ua, _ := s.engine.GetDB().GetSubjectSet(r.Context(), tenantID, id)
 
-	response := api.SubjectSetResponse{
-		Group: api.SubjectSet{
-			ID:        ua.ID,
-			Name:      ua.Name,
-			CreatedAt: ua.CreatedAt,
-		},
-		Revision: revision,
+	response := api.SubjectAttributeResponse{
+		Attribute: mapper.SubjectAttribute(ua),
+		Revision:  revision,
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response)
 }
 
-// DeleteSubjectSet deletes a subject set
-// @Summary Delete subject set
-// @Description Deletes a subject set
-// @Tags subject-sets
-// @Param id path string true "Set ID"
+// DeleteSubjectAttributeCustom deletes a subject set
+// @Summary Delete custom subject attribute
+// @Description Deletes a custom subject attribute
+// @Tags generic
+// @Param id path string true "Attribute ID"
 // @Success 204 "No Content"
-// @Router /api/v1/subject-sets/{id} [delete]
-func (s *Server) DeleteSubjectSet(w http.ResponseWriter, r *http.Request) {
-	if httputil.IsMockMode(r.Context()) {
-		mock.DeleteSubjectSet(w, r)
-		return
-	}
-
+// @Router /api/v1/subject-attributes/custom/{id} [delete]
+func (s *Server) DeleteSubjectAttributeCustom(w http.ResponseWriter, r *http.Request) {
 	tenantID, ok := httputil.GetTenantID(r.Context())
 	if !ok {
 		httputil.RespondError(w, http.StatusBadRequest, "MISSING_TENANT", "Tenant ID required")
@@ -605,14 +493,14 @@ func (s *Server) DeleteSubjectSet(w http.ResponseWriter, r *http.Request) {
 	idStr := chi.URLParam(r, "id")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
-		httputil.RespondError(w, http.StatusBadRequest, "INVALID_ID", "Invalid subject set ID")
+		httputil.RespondError(w, http.StatusBadRequest, "INVALID_ID", "Invalid subject attribute ID")
 		return
 	}
 
 	_, err = s.engine.GetDB().DeleteSubjectSet(r.Context(), tenantID, id)
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
-			httputil.RespondError(w, http.StatusNotFound, "NOT_FOUND", "subject set not found")
+			httputil.RespondError(w, http.StatusNotFound, "NOT_FOUND", "subject attribute not found")
 			return
 		}
 		httputil.RespondError(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
@@ -620,4 +508,64 @@ func (s *Server) DeleteSubjectSet(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// GetSubjectAttributes returns the complete attribute tree for a subject
+// @Summary Get subject attribute tree
+// @Description Returns all attributes (native and custom) assigned to a subject and their hierarchical relationships, forming a tree where the subject is the root node
+// @Tags generic
+// @Produce json
+// @Param id path string true "Subject ID"
+// @Success 200 {object} api.AttributeSubgraphResponse
+// @Router /api/v1/subjects/{id}/attributes [get]
+func (s *Server) GetSubjectAttributes(w http.ResponseWriter, r *http.Request) {
+	tenantID, ok := httputil.GetTenantID(r.Context())
+	if !ok {
+		httputil.RespondError(w, http.StatusBadRequest, "MISSING_TENANT", "Tenant ID required")
+		return
+	}
+
+	idStr := chi.URLParam(r, "id")
+	id, err := uuid.Parse(idStr)
+	if err != nil {
+		httputil.RespondError(w, http.StatusBadRequest, "INVALID_ID", "Invalid subject ID")
+		return
+	}
+
+	attributes, edges, err := s.engine.GetDB().GetSubjectAttributeSubgraph(r.Context(), tenantID, id)
+	if err != nil {
+		httputil.RespondError(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
+		return
+	}
+
+	// Convert to API response format
+	nodes := make([]api.AttributeNode, len(attributes))
+	for i, attr := range attributes {
+		nodes[i] = api.AttributeNode{
+			ID:            attr.ID,
+			Name:          attr.Name,
+			AttributeType: string(attr.AttributeType),
+		}
+	}
+
+	// Convert edges (include subject->UA edges and UA->UA edges)
+	apiEdges := make([]api.AttributeEdge, 0, len(edges))
+	for _, edge := range edges {
+		// Include subject->UA edges and UA->UA edges
+		if (edge.ChildType == postgres.NodeSubject && edge.ParentType == postgres.NodeUA) ||
+			(edge.ChildType == postgres.NodeUA && edge.ParentType == postgres.NodeUA) {
+			apiEdges = append(apiEdges, api.AttributeEdge{
+				ChildID:  edge.ChildID,
+				ParentID: edge.ParentID,
+			})
+		}
+	}
+
+	response := api.AttributeSubgraphResponse{
+		Nodes: nodes,
+		Edges: apiEdges,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
 }

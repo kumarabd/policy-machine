@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/kumarabd/policy-machine/pkg/api"
-	"github.com/kumarabd/policy-machine/internal/mock"
 	httputil "github.com/kumarabd/policy-machine/internal/http"
 )
 
@@ -20,10 +19,6 @@ import (
 // @Success 200 {object} MetaResponse
 // @Router /api/v1/meta [get]
 func (s *Server) GetMeta(w http.ResponseWriter, r *http.Request) {
-	if httputil.IsMockMode(r.Context()) {
-		mock.GetMeta(w, r)
-		return
-	}
 
 	tenantID, ok := httputil.GetTenantID(r.Context())
 	if !ok {
@@ -45,7 +40,6 @@ func (s *Server) GetMeta(w http.ResponseWriter, r *http.Request) {
 
 	response := api.MetaResponse{
 		ServiceVersion: "dev", // TODO: inject from config or build-time variable
-		TenantID:       tenantID,
 		Revision:       rev,
 		AppliedSeq:     appliedSeq,
 		Now:            time.Now(),
@@ -63,10 +57,6 @@ func (s *Server) GetMeta(w http.ResponseWriter, r *http.Request) {
 // @Success 200 {object} RevisionResponse
 // @Router /api/v1/revisions/current [get]
 func (s *Server) GetCurrentRevision(w http.ResponseWriter, r *http.Request) {
-	if httputil.IsMockMode(r.Context()) {
-		mock.GetCurrentRevision(w, r)
-		return
-	}
 
 	tenantID, ok := httputil.GetTenantID(r.Context())
 	if !ok {
@@ -81,7 +71,6 @@ func (s *Server) GetCurrentRevision(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response := api.RevisionResponse{
-		TenantID: tenantID,
 		Revision: rev,
 	}
 
@@ -99,10 +88,6 @@ func (s *Server) GetCurrentRevision(w http.ResponseWriter, r *http.Request) {
 // @Success 200 {object} ChangesResponse
 // @Router /api/v1/changes [get]
 func (s *Server) GetPolicyChanges(w http.ResponseWriter, r *http.Request) {
-	if httputil.IsMockMode(r.Context()) {
-		mock.GetPolicyChanges(w, r)
-		return
-	}
 
 	tenantID, ok := httputil.GetTenantID(r.Context())
 	if !ok {
@@ -150,8 +135,7 @@ func (s *Server) GetPolicyChanges(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response := api.ChangesResponse{
-		TenantID: tenantID,
-		FromSeq:  afterSeq,
+		FromSeq: afterSeq,
 		ToSeq:    toSeq,
 		Changes:  items,
 	}
@@ -171,10 +155,6 @@ func (s *Server) GetPolicyChanges(w http.ResponseWriter, r *http.Request) {
 // @Success 200 {object} ListVersionsResponse
 // @Router /api/v1/versions [get]
 func (s *Server) ListVersions(w http.ResponseWriter, r *http.Request) {
-	if httputil.IsMockMode(r.Context()) {
-		mock.ListVersions(w, r)
-		return
-	}
 
 	tenantID, ok := httputil.GetTenantID(r.Context())
 	if !ok {

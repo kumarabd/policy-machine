@@ -86,8 +86,11 @@ func Seed(ctx context.Context, db *postgres.Handler, tenantID string) error {
 	}
 
 	// Seed associations (rules)
+	// Note: "subject-set" and "object-set" are API terminology only for the subject-sets/object-sets endpoints.
+	// In rules API, we use "subject-attribute" and "object-attribute" to refer to the actual entities.
 	for _, assoc := range data.Associations {
-		if _, _, err := db.CreateRule(ctx, tenantID, assoc.UAID, assoc.OAID, assoc.Operations); err != nil {
+		// Seed data uses UA->OA associations (subject-attribute -> object-attribute)
+		if _, _, err := db.CreateRule(ctx, tenantID, "subject-attribute", assoc.UAID, "object-attribute", assoc.OAID, assoc.Operations); err != nil {
 			return fmt.Errorf("failed to create rule UA=%s OA=%s: %w", assoc.UAID, assoc.OAID, err)
 		}
 	}

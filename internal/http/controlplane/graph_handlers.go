@@ -7,16 +7,12 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
-	"github.com/kumarabd/policy-machine/internal/mock"
+	"github.com/kumarabd/policy-machine/pkg/api"
 	httputil "github.com/kumarabd/policy-machine/internal/http"
 )
 
 // GetGraphSummary returns counts of all entities
 func (s *Server) GetGraphSummary(w http.ResponseWriter, r *http.Request) {
-	if httputil.IsMockMode(r.Context()) {
-		mock.GetGraphSummary(w, r)
-		return
-	}
 
 	tenantID, ok := httputil.GetTenantID(r.Context())
 	if !ok {
@@ -30,14 +26,14 @@ func (s *Server) GetGraphSummary(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	response := httputil.GraphSummaryResponse{
-		Subjects:      int(summary["subjects"]),
-		Objects:       int(summary["objects"]),
-		SubjectSets:   int(summary["subject_sets"]),
-		ObjectSets:    int(summary["object_sets"]),
-		Relationships: int(summary["relationships"]),
-		Rules:         int(summary["rules"]),
-		Denies:        int(summary["denies"]),
+	response := api.GraphSummaryResponse{
+		Subjects:           int(summary["subjects"]),
+		Objects:            int(summary["objects"]),
+		SubjectAttributes:  int(summary["subject_sets"]),  // DB key kept for compatibility
+		ObjectAttributes:   int(summary["object_sets"]),   // DB key kept for compatibility
+		Relationships:      int(summary["relationships"]),
+		Rules:              int(summary["rules"]),
+		Denies:             int(summary["denies"]),
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -47,10 +43,6 @@ func (s *Server) GetGraphSummary(w http.ResponseWriter, r *http.Request) {
 // GetGraphNeighborhood returns nodes and edges around a given node
 // Supports both GET (query params) and POST (request body) for UI compatibility
 func (s *Server) GetGraphNeighborhood(w http.ResponseWriter, r *http.Request) {
-	if httputil.IsMockMode(r.Context()) {
-		mock.GetGraphNeighborhood(w, r)
-		return
-	}
 
 	_, ok := httputil.GetTenantID(r.Context())
 	if !ok {
@@ -121,10 +113,6 @@ func (s *Server) GetGraphNeighborhood(w http.ResponseWriter, r *http.Request) {
 
 // GraphSearch searches for nodes by query
 func (s *Server) GraphSearch(w http.ResponseWriter, r *http.Request) {
-	if httputil.IsMockMode(r.Context()) {
-		mock.GraphSearch(w, r)
-		return
-	}
 
 	tenantID, ok := httputil.GetTenantID(r.Context())
 	if !ok {

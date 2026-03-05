@@ -6,27 +6,23 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/kumarabd/policy-machine/internal/api/mapper"
 	httputil "github.com/kumarabd/policy-machine/internal/http"
-	"github.com/kumarabd/policy-machine/internal/mock"
 	"github.com/kumarabd/policy-machine/internal/postgres"
-	"github.com/kumarabd/policy-machine/pkg/api"
 )
 
-// AddSubjectSetMembers adds members to a subject set
+// AddSubjectAttributeMembers adds members to a custom subject attribute.
+// "Subject set" is API terminology for SubjectAttribute with attribute_type="custom".
 // @Summary Add members to subject set
-// @Description Adds one or more subjects to a subject set
+// @Description Adds one or more subjects to a subject set (custom subject attribute)
 // @Tags subject-sets
 // @Accept json
 // @Produce json
 // @Param id path string true "Subject Set ID"
 // @Param request body AddMembersRequest true "Member IDs"
-// @Success 200 {object} api.SubjectSet
+// @Success 200 {object} api.SubjectAttribute
 // @Router /api/v1/subject-sets/{id}/members:add [post]
-func (s *Server) AddSubjectSetMembers(w http.ResponseWriter, r *http.Request) {
-	if httputil.IsMockMode(r.Context()) {
-		mock.AddSubjectSetMembers(w, r)
-		return
-	}
+func (s *Server) AddSubjectAttributeMembers(w http.ResponseWriter, r *http.Request) {
 
 	tenantID, ok := httputil.GetTenantID(r.Context())
 	if !ok {
@@ -37,7 +33,7 @@ func (s *Server) AddSubjectSetMembers(w http.ResponseWriter, r *http.Request) {
 	idStr := chi.URLParam(r, "id")
 	setID, err := uuid.Parse(idStr)
 	if err != nil {
-		httputil.RespondError(w, http.StatusBadRequest, "INVALID_ID", "Invalid subject set ID")
+		httputil.RespondError(w, http.StatusBadRequest, "INVALID_ID", "Invalid subject attribute ID")
 		return
 	}
 
@@ -86,43 +82,22 @@ func (s *Server) AddSubjectSetMembers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get member IDs from assignment edges
-	memberIDs, err := s.engine.GetDB().GetSubjectSetMembers(r.Context(), tenantID, setID)
-	if err != nil {
-		httputil.RespondError(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
-		return
-	}
-
-	response := api.SubjectSet{
-		ID:               ua.ID,
-		Name:             ua.Name,
-		Description:      "", // Description not stored in SubjectAttribute table
-		ScopeID:          nil,
-		Tags:             []string{},
-		MemberSubjectIDs: memberIDs,
-		CreatedAt:        ua.CreatedAt,
-		UpdatedAt:        &ua.UpdatedAt,
-	}
-
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
+	json.NewEncoder(w).Encode(mapper.SubjectAttribute(ua))
 }
 
-// RemoveSubjectSetMember removes a member from a subject set
+// RemoveSubjectAttributeMember removes a member from a custom subject attribute.
+// "Subject set" is API terminology for SubjectAttribute with attribute_type="custom".
 // @Summary Remove member from subject set
-// @Description Removes a subject from a subject set
+// @Description Removes a subject from a subject set (custom subject attribute)
 // @Tags subject-sets
 // @Accept json
 // @Produce json
 // @Param id path string true "Subject Set ID"
 // @Param request body RemoveMemberRequest true "Member ID"
-// @Success 200 {object} api.SubjectSet
+// @Success 200 {object} api.SubjectAttribute
 // @Router /api/v1/subject-sets/{id}/members:remove [post]
-func (s *Server) RemoveSubjectSetMember(w http.ResponseWriter, r *http.Request) {
-	if httputil.IsMockMode(r.Context()) {
-		mock.RemoveSubjectSetMember(w, r)
-		return
-	}
+func (s *Server) RemoveSubjectAttributeMember(w http.ResponseWriter, r *http.Request) {
 
 	tenantID, ok := httputil.GetTenantID(r.Context())
 	if !ok {
@@ -133,7 +108,7 @@ func (s *Server) RemoveSubjectSetMember(w http.ResponseWriter, r *http.Request) 
 	idStr := chi.URLParam(r, "id")
 	setID, err := uuid.Parse(idStr)
 	if err != nil {
-		httputil.RespondError(w, http.StatusBadRequest, "INVALID_ID", "Invalid subject set ID")
+		httputil.RespondError(w, http.StatusBadRequest, "INVALID_ID", "Invalid subject attribute ID")
 		return
 	}
 
@@ -176,42 +151,22 @@ func (s *Server) RemoveSubjectSetMember(w http.ResponseWriter, r *http.Request) 
 	}
 
 	// Get member IDs from assignment edges
-	memberIDs, err := s.engine.GetDB().GetSubjectSetMembers(r.Context(), tenantID, setID)
-	if err != nil {
-		httputil.RespondError(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
-		return
-	}
-
-	response := api.SubjectSet{
-		ID:               ua.ID,
-		Name:             ua.Name,
-		Description:      "",
-		ScopeID:          nil,
-		Tags:             []string{},
-		MemberSubjectIDs: memberIDs,
-		CreatedAt:        ua.CreatedAt,
-		UpdatedAt:        &ua.UpdatedAt,
-	}
-
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
+	json.NewEncoder(w).Encode(mapper.SubjectAttribute(ua))
 }
 
-// AddObjectSetMembers adds members to an object set
+// AddObjectAttributeMembers adds members to a custom object attribute.
+// "Object set" is API terminology for ObjectAttribute with attribute_type="custom".
 // @Summary Add members to object set
-// @Description Adds one or more objects to an object set
+// @Description Adds one or more objects to an object set (custom object attribute)
 // @Tags object-sets
 // @Accept json
 // @Produce json
 // @Param id path string true "Object Set ID"
 // @Param request body AddObjectMembersRequest true "Member IDs"
-// @Success 200 {object} api.ObjectSet
+// @Success 200 {object} api.ObjectAttribute
 // @Router /api/v1/object-sets/{id}/members:add [post]
-func (s *Server) AddObjectSetMembers(w http.ResponseWriter, r *http.Request) {
-	if httputil.IsMockMode(r.Context()) {
-		mock.AddObjectSetMembers(w, r)
-		return
-	}
+func (s *Server) AddObjectAttributeMembers(w http.ResponseWriter, r *http.Request) {
 
 	tenantID, ok := httputil.GetTenantID(r.Context())
 	if !ok {
@@ -222,7 +177,7 @@ func (s *Server) AddObjectSetMembers(w http.ResponseWriter, r *http.Request) {
 	idStr := chi.URLParam(r, "id")
 	setID, err := uuid.Parse(idStr)
 	if err != nil {
-		httputil.RespondError(w, http.StatusBadRequest, "INVALID_ID", "Invalid object set ID")
+		httputil.RespondError(w, http.StatusBadRequest, "INVALID_ID", "Invalid object attribute ID")
 		return
 	}
 
@@ -271,43 +226,22 @@ func (s *Server) AddObjectSetMembers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get member IDs from assignment edges
-	memberIDs, err := s.engine.GetDB().GetObjectSetMembers(r.Context(), tenantID, setID)
-	if err != nil {
-		httputil.RespondError(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
-		return
-	}
-
-	response := api.ObjectSet{
-		ID:              oa.ID,
-		Name:            oa.Name,
-		Description:     "",
-		ScopeID:         nil,
-		Tags:            []string{},
-		MemberObjectIDs: memberIDs,
-		CreatedAt:       oa.CreatedAt,
-		UpdatedAt:       &oa.UpdatedAt,
-	}
-
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
+	json.NewEncoder(w).Encode(mapper.ObjectAttribute(oa))
 }
 
-// RemoveObjectSetMember removes a member from an object set
+// RemoveObjectAttributeMember removes a member from a custom object attribute.
+// "Object set" is API terminology for ObjectAttribute with attribute_type="custom".
 // @Summary Remove member from object set
-// @Description Removes an object from an object set
+// @Description Removes an object from an object set (custom object attribute)
 // @Tags object-sets
 // @Accept json
 // @Produce json
 // @Param id path string true "Object Set ID"
 // @Param request body RemoveObjectMemberRequest true "Member ID"
-// @Success 200 {object} api.ObjectSet
+// @Success 200 {object} api.ObjectAttribute
 // @Router /api/v1/object-sets/{id}/members:remove [post]
-func (s *Server) RemoveObjectSetMember(w http.ResponseWriter, r *http.Request) {
-	if httputil.IsMockMode(r.Context()) {
-		mock.RemoveObjectSetMember(w, r)
-		return
-	}
+func (s *Server) RemoveObjectAttributeMember(w http.ResponseWriter, r *http.Request) {
 
 	tenantID, ok := httputil.GetTenantID(r.Context())
 	if !ok {
@@ -318,7 +252,7 @@ func (s *Server) RemoveObjectSetMember(w http.ResponseWriter, r *http.Request) {
 	idStr := chi.URLParam(r, "id")
 	setID, err := uuid.Parse(idStr)
 	if err != nil {
-		httputil.RespondError(w, http.StatusBadRequest, "INVALID_ID", "Invalid object set ID")
+		httputil.RespondError(w, http.StatusBadRequest, "INVALID_ID", "Invalid object attribute ID")
 		return
 	}
 
@@ -360,26 +294,8 @@ func (s *Server) RemoveObjectSetMember(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get member IDs from assignment edges
-	memberIDs, err := s.engine.GetDB().GetObjectSetMembers(r.Context(), tenantID, setID)
-	if err != nil {
-		httputil.RespondError(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
-		return
-	}
-
-	response := api.ObjectSet{
-		ID:              oa.ID,
-		Name:            oa.Name,
-		Description:     "",
-		ScopeID:         nil,
-		Tags:            []string{},
-		MemberObjectIDs: memberIDs,
-		CreatedAt:       oa.CreatedAt,
-		UpdatedAt:       &oa.UpdatedAt,
-	}
-
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
+	json.NewEncoder(w).Encode(mapper.ObjectAttribute(oa))
 }
 
 // Request types for member management

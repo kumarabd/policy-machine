@@ -20,7 +20,6 @@ type Config struct {
 	MaxTraversalNodes int               `yaml:"max_traversal_nodes" json:"max_traversal_nodes"` // Maximum nodes to traverse in BFS operations (default: 100000)
 	CacheTTL          time.Duration     `yaml:"cache_ttl" json:"cache_ttl"`                     // Default TTL for most caches (default: 2 minutes)
 	Limits            cache.CacheLimits `yaml:"limits" json:"limits"`                           // Cache capacity limits (zero = use defaults)
-	MockMode          bool              `yaml:"mock_mode" json:"mock_mode"`                     // Enable mock mode for API responses
 }
 
 type Engine struct {

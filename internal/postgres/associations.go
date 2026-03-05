@@ -10,9 +10,9 @@ import (
 func CreateAssociation(ctx context.Context, db *gorm.DB, tenantID string, uaID, oaID uuid.UUID, ops []string) error {
 	return db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		assoc := Association{
-			TenantID:           tenantID,
-			SubjectAttributeID: uaID,
-			ObjectAttributeID:  oaID,
+			TenantID:            tenantID,
+			SubjectAttributeID:  &uaID,
+			ObjectAttributeID:   &oaID,
 		}
 		// Upsert association
 		if err := tx.

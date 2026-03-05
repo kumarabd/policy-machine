@@ -78,44 +78,86 @@ func (s *Server) registerRoutes(defaultTenantID string) {
 			r.Get("/versions/{id}/diff", s.GetVersionDiff)
 			r.Get("/versions/{id}/snapshot", s.GetVersionSnapshot)
 
-			// Subjects
-			r.Route("/subjects", func(r chi.Router) {
-				r.Get("/", s.ListSubjects)
-				r.Post("/", s.CreateSubject)
-				r.Get("/{id}", s.GetSubject)
-				r.Patch("/{id}", s.UpdateSubject)
-				r.Delete("/{id}", s.DeleteSubject)
+			// RBAC group
+			r.Route("/rbac", func(r chi.Router) {
+				// Subjects
+				r.Post("/subjects", s.CreateRBACSubject)
+				r.Post("/subjects:upsert", s.UpsertRBACSubjects)
+				r.Get("/subjects/{id}", s.GetRBACSubject)
+
+				// Roles
+				r.Get("/roles", s.ListRBACRoles)
+				r.Post("/roles", s.CreateRBACRole)
+				r.Post("/roles:upsert", s.UpsertRBACRoles)
+
+				// Bindings
+				r.Post("/bindings", s.CreateRBACBinding)
+				r.Post("/bindings:upsert", s.UpsertRBACBindings)
+
+				// Objects
+				r.Get("/objects", s.ListRBACObjects)
+				r.Post("/objects:upsert", s.UpsertRBACObjects)
 			})
 
-			// Subject Sets
-			r.Route("/subject-sets", func(r chi.Router) {
-				r.Get("/", s.ListSubjectSets)
-				r.Post("/", s.CreateSubjectSet)
-				r.Get("/{id}", s.GetSubjectSet)
-				r.Patch("/{id}", s.UpdateSubjectSet)
-				r.Delete("/{id}", s.DeleteSubjectSet)
-				r.Post("/{id}/members:add", s.AddSubjectSetMembers)
-				r.Post("/{id}/members:remove", s.RemoveSubjectSetMember)
-			})
+			// Generic resource APIs (subjects, objects, attributes)
+			r.Route("/generic", func(r chi.Router) {
+				// Subjects
+				r.Route("/subjects", func(r chi.Router) {
+					r.Get("/", s.ListSubjects)
+					r.Post("/", s.CreateSubject)
+					r.Get("/{id}", s.GetSubject)
+					r.Get("/{id}/attributes", s.GetSubjectAttributes) // Get all attributes for a subject
+					r.Patch("/{id}", s.UpdateSubject)
+					r.Delete("/{id}", s.DeleteSubject)
+				})
 
-			// Objects
-			r.Route("/objects", func(r chi.Router) {
-				r.Get("/", s.ListObjects)
-				r.Post("/", s.CreateObject)
-				r.Get("/{id}", s.GetObject)
-				r.Patch("/{id}", s.UpdateObject)
-				r.Delete("/{id}", s.DeleteObject)
-			})
+				// Subject Attributes
+				r.Route("/subject-attributes", func(r chi.Router) {
+					r.Get("/", s.ListSubjectAttributes)
+					r.Post("/", s.CreateSubjectAttribute)
+					r.Get("/{id}", s.GetSubjectAttribute)
+					r.Patch("/{id}", s.UpdateSubjectAttribute)
+					r.Delete("/{id}", s.DeleteSubjectAttribute)
+					// Custom attributes (with member management)
+					r.Route("/custom", func(r chi.Router) {
+						r.Get("/", s.ListSubjectAttributesCustom)
+						r.Post("/", s.CreateSubjectAttributeCustom)
+						r.Get("/{id}", s.GetSubjectAttributeCustom)
+						r.Patch("/{id}", s.UpdateSubjectAttributeCustom)
+						r.Delete("/{id}", s.DeleteSubjectAttributeCustom)
+						r.Post("/{id}/members:add", s.AddSubjectAttributeMembers)
+						r.Post("/{id}/members:remove", s.RemoveSubjectAttributeMember)
+					})
+				})
 
-			// Object Sets
-			r.Route("/object-sets", func(r chi.Router) {
-				r.Get("/", s.ListObjectSets)
-				r.Post("/", s.CreateObjectSet)
-				r.Get("/{id}", s.GetObjectSet)
-				r.Patch("/{id}", s.UpdateObjectSet)
-				r.Delete("/{id}", s.DeleteObjectSet)
-				r.Post("/{id}/members:add", s.AddObjectSetMembers)
-				r.Post("/{id}/members:remove", s.RemoveObjectSetMember)
+				// Objects
+				r.Route("/objects", func(r chi.Router) {
+					r.Get("/", s.ListObjects)
+					r.Post("/", s.CreateObject)
+					r.Get("/{id}", s.GetObject)
+					r.Get("/{id}/attributes", s.GetObjectAttributes) // Get all attributes for an object
+					r.Patch("/{id}", s.UpdateObject)
+					r.Delete("/{id}", s.DeleteObject)
+				})
+
+				// Object Attributes
+				r.Route("/object-attributes", func(r chi.Router) {
+					r.Get("/", s.ListObjectAttributes)
+					r.Post("/", s.CreateObjectAttribute)
+					r.Get("/{id}", s.GetObjectAttribute)
+					r.Patch("/{id}", s.UpdateObjectAttribute)
+					r.Delete("/{id}", s.DeleteObjectAttribute)
+					// Custom attributes (with member management)
+					r.Route("/custom", func(r chi.Router) {
+						r.Get("/", s.ListObjectAttributesCustom)
+						r.Post("/", s.CreateObjectAttributeCustom)
+						r.Get("/{id}", s.GetObjectAttributeCustom)
+						r.Patch("/{id}", s.UpdateObjectAttributeCustom)
+						r.Delete("/{id}", s.DeleteObjectAttributeCustom)
+						r.Post("/{id}/members:add", s.AddObjectAttributeMembers)
+						r.Post("/{id}/members:remove", s.RemoveObjectAttributeMember)
+					})
+				})
 			})
 
 			// Relationships
